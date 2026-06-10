@@ -4,10 +4,110 @@
 // Get a free hosted Postgres database in seconds: `npx create-db`
 
 generator client {
-  provider = "prisma-client"
-  output   = "../generated/prisma"
+  provider     = "prisma-client"
+  output       = "../generated/prisma"
+  // NestJS 빌드(CommonJS)와 맞추기 위해 CJS로 생성한다. (기본값은 ESM)
+  moduleFormat = "cjs"
 }
 
 datasource db {
   provider = "mysql"
+}
+
+/// 인증 제공자
+enum AuthProvider {
+  KAKAO
+  GUEST
+}
+
+/// 사용자 (카카오 로그인 + 게스트 계정)
+model User {
+  id           String       @id @default(cuid())
+  provider     AuthProvider
+  /// 카카오 회원번호. 게스트는 null
+  providerId   String?
+  nickname     String
+  email        String?
+  profileImage String?
+  isGuest      Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  // 같은 제공자 내에서 providerId 중복 방지 (MySQL은 NULL 다중 허용 → 게스트 무제한)
+  @@unique([provider, providerId])
+
+  savedCourses SavedCourse[]
+  bookmarks    Bookmark[]
+  stamps       Stamp[]
+  matchOptIns  MatchOptIn[]
+}
+
+/// 찜 대상 유형
+enum BookmarkType {
+  FESTIVAL // 축제 (TourAPI contentId)
+  SPOT // 관광지 (TourAPI contentId)
+  COURSE // 저장한 코스 (SavedCourse.id)
+}
+
+/// 저장한 코스 — 생성된 CourseDto 스냅샷을 JSON으로 보관
+model SavedCourse {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  zone      String
+  nights    Int      @default(0)
+  /// 생성 당시 CourseDto 전체 (관광 원본은 contentId 참조이므로 스냅샷 보관 OK)
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// 찜 (축제·관광지·코스)
+model Bookmark {
+  id         String       @id @default(cuid())
+  userId     String
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetType BookmarkType
+  /// FESTIVAL/SPOT=TourAPI contentId, COURSE=SavedCourse.id
+  targetId   String
+  title      String
+  image      String?
+  /// 축제 시작일 등 D-Day 알림 기준일
+  dDayDate   DateTime?
+  createdAt  DateTime     @default(now())
+
+  @@unique([userId, targetType, targetId])
+  @@index([userId])
+}
+
+/// 감성 스탬프 — 코스 내 관광지 실제 방문 인증 (감성존별 도장)
+model Stamp {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 감성존 (SEA/SNOW/VALLEY/RETRO/PHOTO)
+  zone      String
+  contentId String
+  title     String
+  image     String?
+  visitedAt DateTime @default(now())
+
+  // 같은 관광지는 한 번만 스탬프
+  @@unique([userId, contentId])
+  @@index([userId])
+}
+
+/// 동선 매칭 옵트인 — 동일 감성존·날짜 여행 메이트 매칭(상호 옵트인)
+model MatchOptIn {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone       String
+  travelDate DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, zone, travelDate])
+  @@index([zone, travelDate])
 }
