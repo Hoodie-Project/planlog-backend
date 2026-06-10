@@ -1,12 +1,11 @@
 import { Controller, Get } from '@nestjs/common';
-import { AppService } from './app.service';
+import { ApiExcludeController } from '@nestjs/swagger';
 
+@ApiExcludeController() // 헬스체크 전용 — 프론트 미사용, Swagger 문서에서 숨김
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
-
-  @Get()
-  getHello(): string {
-    return this.appService.getHello();
+  @Get('health')
+  health() {
+    return { status: 'ok', service: 'planlog-backend' };
   }
 }
