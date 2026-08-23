@@ -138,3 +138,5 @@ JWT_EXPIRES_IN="30d"
 ```
 
 자세한 단계별 개발 로드맵은 [`docs/ROADMAP.md`](docs/ROADMAP.md) 참고.
+
+pm2 배포 방법 및 정전 등 장애 복구 절차는 [`DEPLOY.md`](DEPLOY.md) 참고.
