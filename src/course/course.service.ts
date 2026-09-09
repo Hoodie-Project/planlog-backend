@@ -175,6 +175,16 @@ export class CourseService {
       ? this.buildRelatedDebug(relatedMap.size, legs)
       : undefined;
 
+    const matchedLegs = legs.filter((l) => l.matchedRelated).length;
+    const reasons = this.buildReasons({
+      zoneLabel: ZONE_META[zone].label,
+      transport,
+      style,
+      days,
+      matchedLegs,
+      congestion,
+    });
+
     return {
       zone,
       zoneLabel: ZONE_META[zone].label,
@@ -187,7 +197,62 @@ export class CourseService {
       days,
       congestion,
       relatedDebug,
+      reasons,
     };
+  }
+
+  /** 실제로 이번 생성에 반영된 신호만 골라 추천 이유 문장으로 정리 */
+  private buildReasons(params: {
+    zoneLabel: string;
+    transport: Transport;
+    style: Style;
+    days: CourseDayDto[];
+    matchedLegs: number;
+    congestion?: CourseCongestionDto;
+  }): string[] {
+    const { zoneLabel, transport, style, days, matchedLegs, congestion } =
+      params;
+    const reasons: string[] = [];
+    const spotCount = days.reduce(
+      (s, d) => s + d.items.filter((i) => i.type === CourseItemType.SPOT).length,
+      0,
+    );
+
+    reasons.push(
+      `선택한 감성 '${zoneLabel}'과 일치하는 장소 ${spotCount}곳으로 구성했어요.`,
+    );
+
+    if (style === Style.PET) {
+      reasons.push('반려동물 동반 가능한 장소를 우선 선정했어요.');
+    }
+
+    reasons.push(
+      `${this.transportLabel(transport)} 기준 한 구간 이동 범위 내에서 동선을 짰어요.`,
+    );
+
+    if (matchedLegs > 0) {
+      reasons.push(
+        `연관 관광지 데이터를 활용해 자연스럽게 이어지는 동선 ${matchedLegs}구간을 반영했어요.`,
+      );
+    }
+
+    if (congestion) {
+      if (
+        congestion.level === 'HIGH' &&
+        congestion.recommendedWeekday &&
+        congestion.recommendedWeekday !== congestion.weekday
+      ) {
+        reasons.push(
+          `${congestion.weekday}은 혼잡도가 높은 편이에요. ${congestion.recommendedWeekday}이 더 한산해요.`,
+        );
+      } else if (congestion.level !== 'HIGH') {
+        reasons.push(
+          `${congestion.weekday} 기준 혼잡 피크 시간대를 피해 여유롭게 다녀올 수 있어요.`,
+        );
+      }
+    }
+
+    return reasons;
   }
 
   /** 연관관광지 맵 조회(실패 시 빈 맵 — 코스 생성을 막지 않음) */

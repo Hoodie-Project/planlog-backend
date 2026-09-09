@@ -161,6 +161,16 @@ export class CourseDto {
   })
   days: CourseDayDto[];
 
+  @ApiProperty({
+    type: [String],
+    description: '이 코스를 추천한 이유 (감성/동선/혼잡도 등 근거 요약, 번호 없이 문장만)',
+    example: [
+      "선택한 감성 '동해 바다존'과 일치하는 장소 4곳으로 구성했어요.",
+      '뚜벅이 기준 한 구간 이동 범위 내에서 동선을 짰어요.',
+    ],
+  })
+  reasons: string[];
+
   @ApiPropertyOptional({
     type: CourseCongestionDto,
     description: 'travelDate 를 준 경우의 혼잡도 안내 (없으면 생략)',
