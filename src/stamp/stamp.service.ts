@@ -62,4 +62,29 @@ export class StampService {
         : null,
     };
   }
+
+  /** 스탬프 분포 기반 여행 성향(감성존별 비중 %) — 스탬프가 하나도 없으면 전부 0% */
+  async getTraits(userId: string) {
+    const stamps = await this.prisma.stamp.findMany({
+      where: { userId },
+      select: { zone: true },
+    });
+    const total = stamps.length;
+    const countByZone = new Map<string, number>();
+    for (const s of stamps) {
+      countByZone.set(s.zone, (countByZone.get(s.zone) ?? 0) + 1);
+    }
+
+    const traits = ALL_ZONES.map((zone) => {
+      const count = countByZone.get(zone) ?? 0;
+      return {
+        zone,
+        label: ZONE_META[zone].label,
+        count,
+        percent: total > 0 ? Math.round((count / total) * 100) : 0,
+      };
+    }).sort((a, b) => b.percent - a.percent);
+
+    return { totalStamps: total, traits };
+  }
 }

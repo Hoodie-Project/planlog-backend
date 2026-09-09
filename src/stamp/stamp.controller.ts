@@ -43,6 +43,23 @@ export class StampProgressDto {
   reward: { badge: string; title: string } | null;
 }
 
+class ZoneTraitDto {
+  @ApiProperty({ example: 'SEA' }) zone: string;
+  @ApiProperty({ example: '동해 바다존' }) label: string;
+  @ApiProperty({ description: '해당 존 스탬프 수', example: 3 }) count: number;
+  @ApiProperty({ description: '전체 스탬프 중 비중(%)', example: 42 })
+  percent: number;
+}
+
+export class StampTraitsDto {
+  @ApiProperty({ example: 7 }) totalStamps: number;
+  @ApiProperty({
+    type: [ZoneTraitDto],
+    description: '비중(percent) 내림차순 정렬',
+  })
+  traits: ZoneTraitDto[];
+}
+
 @ApiTags('감성 스탬프 (Stamp)')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -80,5 +97,16 @@ export class StampController {
   @ApiOkResponse({ type: StampProgressDto })
   getProgress(@CurrentUser() user: User) {
     return this.stampService.getProgress(user.id);
+  }
+
+  @Get('traits')
+  @ApiOperation({
+    summary: '여행 성향(감성존 비중)',
+    description:
+      '보유 스탬프의 감성존 분포를 비중(%)으로 반환. 스탬프가 없으면 전부 0%. "나의 기록" 페이지의 여행 성향 그래프용. (JWT 필요)',
+  })
+  @ApiOkResponse({ type: StampTraitsDto })
+  getTraits(@CurrentUser() user: User) {
+    return this.stampService.getTraits(user.id);
   }
 }

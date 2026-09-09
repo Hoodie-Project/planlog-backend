@@ -5,18 +5,21 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
 import { MeStatsDto } from './dto/me-stats.dto';
+import { RecentActivityDto } from './dto/recent-activity.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import type { User } from '../../generated/prisma/client.js';
@@ -90,5 +93,30 @@ export class AuthController {
   @ApiOkResponse({ type: MeStatsDto })
   stats(@CurrentUser() user: User) {
     return this.authService.getStats(user.id);
+  }
+
+  @Get('me/recent-activities')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: '최근 활동 피드',
+    description:
+      '저장한 코스/스탬프 획득을 시간순으로 병합해 최신순 반환. "나의 기록" 페이지 최근 활동 카드용. 유효한 JWT 필요.',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: '최대 개수(기본 10, 1~30)',
+  })
+  @ApiOkResponse({ type: [RecentActivityDto] })
+  recentActivities(
+    @CurrentUser() user: User,
+    @Query('limit') limitRaw?: string,
+  ) {
+    const parsed = Number(limitRaw);
+    const limit = Number.isFinite(parsed)
+      ? Math.min(30, Math.max(1, Math.trunc(parsed)))
+      : 10;
+    return this.authService.getRecentActivities(user.id, limit);
   }
 }

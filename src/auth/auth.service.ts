@@ -5,6 +5,7 @@ import { User } from '../../generated/prisma/client.js';
 import { AuthProvider } from '../../generated/prisma/enums.js';
 import { AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
 import { MeStatsDto } from './dto/me-stats.dto';
+import { RecentActivityDto, RecentActivityType } from './dto/recent-activity.dto';
 import { Zone } from '../common/gangwon.constants';
 
 const TOTAL_ZONE_COUNT = Object.values(Zone).length;
@@ -94,6 +95,44 @@ export class AuthService {
       collectedZoneCount,
       totalZoneCount: TOTAL_ZONE_COUNT,
     };
+  }
+
+  /** 저장한 코스/스탬프 최근 활동을 시간순으로 병합 ("나의 기록" 최근 활동 피드용) */
+  async getRecentActivities(
+    userId: string,
+    limit = 10,
+  ): Promise<RecentActivityDto[]> {
+    const [savedCourses, stamps] = await Promise.all([
+      this.prisma.savedCourse.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: { title: true, createdAt: true },
+      }),
+      this.prisma.stamp.findMany({
+        where: { userId },
+        orderBy: { visitedAt: 'desc' },
+        take: limit,
+        select: { title: true, visitedAt: true },
+      }),
+    ]);
+
+    const activities: RecentActivityDto[] = [
+      ...savedCourses.map((c) => ({
+        type: RecentActivityType.SAVED_COURSE,
+        title: `${c.title} 저장`,
+        occurredAt: c.createdAt,
+      })),
+      ...stamps.map((s) => ({
+        type: RecentActivityType.STAMP,
+        title: `${s.title} 스탬프 획득`,
+        occurredAt: s.visitedAt,
+      })),
+    ];
+
+    return activities
+      .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime())
+      .slice(0, limit);
   }
 
   private async fetchKakaoProfile(accessToken: string): Promise<KakaoProfile> {
