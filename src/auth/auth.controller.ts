@@ -45,10 +45,12 @@ export class AuthController {
   @Post('guest')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '게스트 로그인 (심사·테스트용)',
+    summary: '게스트 로그인 (심사·테스트용, 아이디/비밀번호 없음)',
     description: [
-      '자격증명 없이 즉시 게스트 계정을 만들고 JWT 를 발급합니다. (요청 본문 없음)',
+      '⚠️ 별도의 아이디·비밀번호가 존재하지 않습니다. 이 API를 호출(요청 본문 없이 POST)하는 것 자체가 로그인이며, 즉시 고정 게스트 계정("Guest")으로 JWT가 발급됩니다.',
+      '앱스토어/플레이스토어 심사 시 테스트 계정 입력란에는 **"게스트로 시작하기" 버튼 클릭만으로 로그인됨(계정 정보 입력 불필요)** 이라고 안내하면 됩니다.',
       '',
+      '**요청 본문**: 없음',
       '**응답(AuthResponseDto)**: `{ accessToken: 서비스 JWT, user: { ..., isGuest: true } }`',
     ].join('\n'),
   })
