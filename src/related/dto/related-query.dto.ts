@@ -13,7 +13,8 @@ import { Zone } from '../../common/gangwon.constants';
 
 export class RelatedQueryDto {
   @ApiPropertyOptional({
-    description: '감성존 (해당 존의 데이터랩 시군구들을 조회). zone 또는 signguCode 중 하나 필요',
+    description:
+      '감성존 (해당 존의 데이터랩 시군구들을 조회). zone 또는 signguCode 중 하나 필요',
     enum: Zone,
   })
   @IsOptional()
@@ -29,7 +30,8 @@ export class RelatedQueryDto {
   signguCode?: string;
 
   @ApiPropertyOptional({
-    description: '기준 관광지명 필터(부분일치). 특정 관광지의 연관 관광지만 보고 싶을 때',
+    description:
+      '기준 관광지명 필터(부분일치). 특정 관광지의 연관 관광지만 보고 싶을 때',
     example: '오죽헌',
   })
   @IsOptional()
@@ -44,7 +46,12 @@ export class RelatedQueryDto {
   @Matches(/^\d{6}$/, { message: 'baseYm 은 YYYYMM 형식이어야 합니다.' })
   baseYm?: string;
 
-  @ApiPropertyOptional({ description: '기준 관광지 최대 개수', default: 10, minimum: 1, maximum: 30 })
+  @ApiPropertyOptional({
+    description: '기준 관광지 최대 개수',
+    default: 10,
+    minimum: 1,
+    maximum: 30,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

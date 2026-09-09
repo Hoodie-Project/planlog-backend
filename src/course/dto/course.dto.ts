@@ -46,7 +46,10 @@ export class CourseDayDto {
   @ApiProperty({ description: '며칠차 (1부터)', example: 1 })
   day: number;
 
-  @ApiProperty({ description: '이 날 동선 요약', example: '1일차 · 속초 아바이마을 4곳' })
+  @ApiProperty({
+    description: '이 날 동선 요약',
+    example: '1일차 · 속초 아바이마을 4곳',
+  })
   summary: string;
 
   @ApiProperty({ description: '이 날 총 이동 거리(m)', example: 1600 })
@@ -117,7 +120,10 @@ export class CourseRelatedDebugDto {
   @ApiProperty({ description: '연관 시도 구간 수(첫 스팟 제외)' })
   totalLegs: number;
 
-  @ApiProperty({ description: '적중률(%) = matchedLegs/totalLegs', example: 67 })
+  @ApiProperty({
+    description: '적중률(%) = matchedLegs/totalLegs',
+    example: 67,
+  })
   hitRate: number;
 
   @ApiProperty({ type: [RelatedLegDto], description: '구간별 매칭 상세' })
@@ -126,11 +132,15 @@ export class CourseRelatedDebugDto {
 
 export class CourseDto {
   @ApiProperty({ enum: Zone }) zone: Zone;
-  @ApiProperty({ description: '감성존 라벨', example: '동해 바다존' }) zoneLabel: string;
+  @ApiProperty({ description: '감성존 라벨', example: '동해 바다존' })
+  zoneLabel: string;
   @ApiProperty({ enum: Transport }) transport: Transport;
   @ApiProperty({ enum: Style }) style: Style;
 
-  @ApiProperty({ description: '숙박 일수 (0=당일, 1=1박2일, 2=2박3일)', example: 1 })
+  @ApiProperty({
+    description: '숙박 일수 (0=당일, 1=1박2일, 2=2박3일)',
+    example: 1,
+  })
   nights: number;
 
   @ApiProperty({
@@ -145,7 +155,10 @@ export class CourseDto {
   @ApiProperty({ description: '전체 이동 시간(분)', example: 95 })
   totalTravelMinutes: number;
 
-  @ApiProperty({ type: [CourseDayDto], description: '일자별 동선 (당일치기는 1개)' })
+  @ApiProperty({
+    type: [CourseDayDto],
+    description: '일자별 동선 (당일치기는 1개)',
+  })
   days: CourseDayDto[];
 
   @ApiPropertyOptional({

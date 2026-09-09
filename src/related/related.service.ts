@@ -29,13 +29,16 @@ interface RelatedRawItem {
 
 export class RelatedItemDto {
   @ApiProperty({ example: '주문진수산시장' }) name: string;
-  @ApiProperty({ example: '쇼핑', description: '카테고리(중분류 우선)' }) category: string;
+  @ApiProperty({ example: '쇼핑', description: '카테고리(중분류 우선)' })
+  category: string;
   @ApiProperty({ example: '강원특별자치도 강릉시' }) region: string;
-  @ApiProperty({ example: 1, description: '연관 순위(낮을수록 강함)' }) rank: number;
+  @ApiProperty({ example: 1, description: '연관 순위(낮을수록 강함)' })
+  rank: number;
 }
 
 export class RelatedSpotDto {
-  @ApiProperty({ example: '오죽헌', description: '기준 관광지' }) baseSpot: string;
+  @ApiProperty({ example: '오죽헌', description: '기준 관광지' })
+  baseSpot: string;
   @ApiProperty({ example: '강릉시' }) sigungu: string;
   @ApiProperty({ type: [RelatedItemDto], description: '연관 관광지(순위순)' })
   related: RelatedItemDto[];
@@ -90,14 +93,17 @@ export class RelatedService {
     const out = new Map<string, string[]>();
     for (const [k, arr] of tmp) {
       arr.sort((a, b) => a.rank - b.rank);
-      out.set(k, arr.map((x) => x.name));
+      out.set(
+        k,
+        arr.map((x) => x.name),
+      );
     }
     return out;
   }
 
   private resolveSigunguCodes(query: RelatedQueryDto): string[] {
     if (query.signguCode) return [query.signguCode];
-    if (query.zone) return ZONE_DL_SIGUNGU[query.zone as Zone];
+    if (query.zone) return ZONE_DL_SIGUNGU[query.zone];
     throw new BadRequestException('zone 또는 signguCode 중 하나는 필요합니다.');
   }
 

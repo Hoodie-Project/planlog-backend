@@ -67,7 +67,11 @@ export class SpotController {
     description:
       'detailCommon2 공통정보. 코스/목록에서 받은 `contentId`로 상세(개요 overview 포함)를 가져옵니다.',
   })
-  @ApiParam({ name: 'contentId', description: 'TourAPI 콘텐츠 ID', example: '126508' })
+  @ApiParam({
+    name: 'contentId',
+    description: 'TourAPI 콘텐츠 ID',
+    example: '126508',
+  })
   @ApiOkResponse({ type: PlaceDto, description: 'PlaceDto + overview(개요)' })
   findDetail(@Param('contentId') contentId: string) {
     return this.spotService.findDetail(contentId);
@@ -78,7 +82,11 @@ export class SpotController {
     summary: '관광지 이미지 목록',
     description: 'detailImage2 — 원본 이미지 URL 배열 (감성 인증 카드 소스).',
   })
-  @ApiParam({ name: 'contentId', description: 'TourAPI 콘텐츠 ID', example: '126508' })
+  @ApiParam({
+    name: 'contentId',
+    description: 'TourAPI 콘텐츠 ID',
+    example: '126508',
+  })
   @ApiOkResponse({ type: [String], description: '이미지 URL 문자열 배열' })
   findImages(@Param('contentId') contentId: string) {
     return this.spotService.findImages(contentId);

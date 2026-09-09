@@ -62,7 +62,10 @@ export class StampController {
   }
 
   @Get()
-  @ApiOperation({ summary: '내 스탬프 목록', description: '최신 방문순. (JWT 필요)' })
+  @ApiOperation({
+    summary: '내 스탬프 목록',
+    description: '최신 방문순. (JWT 필요)',
+  })
   @ApiOkResponse({ type: [StampEntityDto] })
   findAll(@CurrentUser() user: User) {
     return this.stampService.findAll(user.id);

@@ -7,10 +7,7 @@ import {
   inferZone,
 } from '../common/gangwon.constants';
 import { toPlaceDto } from '../common/dto/place.dto';
-import {
-  AccommodationQueryDto,
-  StayType,
-} from './dto/accommodation-query.dto';
+import { AccommodationQueryDto, StayType } from './dto/accommodation-query.dto';
 import { StayDto } from './dto/stay.dto';
 
 const KOR_SERVICE = 'KorService2';
@@ -25,7 +22,7 @@ export class AccommodationService {
   constructor(private readonly tourApi: TourApiService) {}
 
   async findStays(query: AccommodationQueryDto): Promise<StayDto[]> {
-    const sigunguCodes = query.zone
+    const sigunguCodes: (string | undefined)[] = query.zone
       ? ZONE_META[query.zone].sigunguCodes
       : [undefined];
 

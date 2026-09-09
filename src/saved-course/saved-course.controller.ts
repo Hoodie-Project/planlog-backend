@@ -26,7 +26,11 @@ export class SavedCourseEntityDto {
   @ApiProperty({ example: '속초 뚜벅이 당일치기' }) title: string;
   @ApiProperty({ example: 'SEA' }) zone: string;
   @ApiProperty({ example: 0 }) nights: number;
-  @ApiProperty({ description: '저장된 코스(CourseDto) 스냅샷', type: 'object', additionalProperties: true })
+  @ApiProperty({
+    description: '저장된 코스(CourseDto) 스냅샷',
+    type: 'object',
+    additionalProperties: true,
+  })
   payload: Record<string, unknown>;
   @ApiProperty() createdAt: Date;
 }
@@ -50,21 +54,30 @@ export class SavedCourseController {
   }
 
   @Get()
-  @ApiOperation({ summary: '내 저장 코스 목록', description: '최신순. (JWT 필요)' })
+  @ApiOperation({
+    summary: '내 저장 코스 목록',
+    description: '최신순. (JWT 필요)',
+  })
   @ApiOkResponse({ type: [SavedCourseEntityDto] })
   findAll(@CurrentUser() user: User) {
     return this.savedCourseService.findAll(user.id);
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '저장 코스 상세', description: 'payload 에 코스 전체가 들어있음. (JWT 필요)' })
+  @ApiOperation({
+    summary: '저장 코스 상세',
+    description: 'payload 에 코스 전체가 들어있음. (JWT 필요)',
+  })
   @ApiOkResponse({ type: SavedCourseEntityDto })
   findOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.savedCourseService.findOne(user.id, id);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '저장 코스 삭제', description: '본인 코스만 삭제. (JWT 필요)' })
+  @ApiOperation({
+    summary: '저장 코스 삭제',
+    description: '본인 코스만 삭제. (JWT 필요)',
+  })
   remove(@CurrentUser() user: User, @Param('id') id: string) {
     return this.savedCourseService.remove(user.id, id);
   }

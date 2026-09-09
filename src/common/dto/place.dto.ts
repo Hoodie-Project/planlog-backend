@@ -17,7 +17,10 @@ export class PlaceDto {
   @ApiProperty({ description: '명칭', example: '정동진' })
   title: string;
 
-  @ApiPropertyOptional({ description: '주소', example: '강원특별자치도 강릉시 강동면' })
+  @ApiPropertyOptional({
+    description: '주소',
+    example: '강원특별자치도 강릉시 강동면',
+  })
   address?: string;
 
   @ApiPropertyOptional({ description: '시군구 코드', example: '1' })

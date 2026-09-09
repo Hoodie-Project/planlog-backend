@@ -23,7 +23,10 @@ interface GoCampingRawItem {
 }
 
 export class CampingQueryDto {
-  @ApiPropertyOptional({ description: '반려동물 동반 가능 캠핑장만', default: false })
+  @ApiPropertyOptional({
+    description: '반려동물 동반 가능 캠핑장만',
+    default: false,
+  })
   @IsOptional()
   @IsBooleanString()
   petOnly?: string;
@@ -50,7 +53,8 @@ export class CampingDto {
   @ApiPropertyOptional() intro?: string;
   @ApiPropertyOptional() address?: string;
   @ApiPropertyOptional({ description: '시군구' }) sigungu?: string;
-  @ApiPropertyOptional({ description: '업종(글램핑/카라반 등)' }) induty?: string;
+  @ApiPropertyOptional({ description: '업종(글램핑/카라반 등)' })
+  induty?: string;
   @ApiPropertyOptional() mapX?: string;
   @ApiPropertyOptional() mapY?: string;
   @ApiPropertyOptional() tel?: string;

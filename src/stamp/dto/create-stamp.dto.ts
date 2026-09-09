@@ -7,7 +7,10 @@ export class CreateStampDto {
   @IsEnum(Zone)
   zone: Zone;
 
-  @ApiProperty({ description: '방문 관광지 TourAPI contentId', example: '126508' })
+  @ApiProperty({
+    description: '방문 관광지 TourAPI contentId',
+    example: '126508',
+  })
   @IsString()
   contentId: string;
 

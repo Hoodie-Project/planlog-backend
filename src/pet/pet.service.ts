@@ -33,9 +33,16 @@ export class PetService {
   /** 코스 생성용 — 반려동물 동반 가능 관광지 원본(좌표 포함). 실패 시 빈 배열 */
   async getPetSpotRawItems(zone: Zone): Promise<TourRawItem[]> {
     try {
-      return await this.fetchPetAreaList(zone, ContentType.TOURIST_SPOT, 100, 1);
+      return await this.fetchPetAreaList(
+        zone,
+        ContentType.TOURIST_SPOT,
+        100,
+        1,
+      );
     } catch (e) {
-      this.logger.warn(`반려동물 장소 조회 실패(폴백): ${(e as Error).message}`);
+      this.logger.warn(
+        `반려동물 장소 조회 실패(폴백): ${(e as Error).message}`,
+      );
       return [];
     }
   }
@@ -56,7 +63,9 @@ export class PetService {
     numOfRows = 20,
     pageNo = 1,
   ): Promise<TourRawItem[]> {
-    const codes = zone ? ZONE_META[zone].sigunguCodes : [undefined];
+    const codes: (string | undefined)[] = zone
+      ? ZONE_META[zone].sigunguCodes
+      : [undefined];
     const results = await Promise.all(
       codes.map((sigunguCode) =>
         this.tourApi.getList<TourRawItem>(PET_SERVICE, 'areaBasedList2', {

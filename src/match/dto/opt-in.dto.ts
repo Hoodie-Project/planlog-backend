@@ -8,6 +8,8 @@ export class OptInDto {
   zone: Zone;
 
   @ApiProperty({ description: '여행 날짜(YYYY-MM-DD)', example: '2026-06-20' })
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'travelDate 는 YYYY-MM-DD 형식이어야 합니다.' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'travelDate 는 YYYY-MM-DD 형식이어야 합니다.',
+  })
   travelDate: string;
 }

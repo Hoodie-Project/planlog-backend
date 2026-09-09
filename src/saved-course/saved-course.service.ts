@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '../../generated/prisma/client.js';
 import { CreateSavedCourseDto } from './dto/create-saved-course.dto';
 
 @Injectable()
@@ -14,7 +15,8 @@ export class SavedCourseService {
         title: dto.title ?? course.summary ?? '내 코스',
         zone: course.zone,
         nights: course.nights ?? 0,
-        payload: course as unknown as object,
+        // 클래스 인스턴스(CourseDto)를 Prisma Json 필드가 요구하는 순수 JSON 값으로 변환
+        payload: JSON.parse(JSON.stringify(course)) as Prisma.InputJsonValue,
       },
     });
   }

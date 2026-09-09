@@ -27,10 +27,7 @@ import {
   RelatedLegDto,
 } from './dto/course.dto';
 import { CongestionService } from '../congestion/congestion.service';
-import {
-  RelatedService,
-  normalizeSpotName,
-} from '../related/related.service';
+import { RelatedService, normalizeSpotName } from '../related/related.service';
 import { PetService } from '../pet/pet.service';
 
 const KOR_SERVICE = 'KorService2';
@@ -147,7 +144,13 @@ export class CourseService {
         : this.pickNearRandom(stayPool, lastPos, used, rng);
       if (stay) used.add(stay.raw.contentid);
 
-      const items = this.buildItinerary(daySpots, meal, stay, anchor, transport);
+      const items = this.buildItinerary(
+        daySpots,
+        meal,
+        stay,
+        anchor,
+        transport,
+      );
       const distance = items.reduce((s, it) => s + it.distanceFromPrev, 0);
       const travel = items.reduce((s, it) => s + it.travelMinutesFromPrev, 0);
       const spotN = items.filter((i) => i.type === CourseItemType.SPOT).length;
@@ -274,7 +277,10 @@ export class CourseService {
         }),
       ),
     );
-    return this.toCandidates(results.flatMap((r) => r.items), meta.keywords);
+    return this.toCandidates(
+      results.flatMap((r) => r.items),
+      meta.keywords,
+    );
   }
 
   private async collectStays(zone: Zone, style: Style): Promise<Candidate[]> {
@@ -388,7 +394,10 @@ export class CourseService {
       if (inRange.length === 0) break;
       const top = inRange.slice(0, Math.min(3, inRange.length));
       // 가까울수록(앞 순위) 큰 가중치
-      const weighted = top.map((x, idx) => ({ ...x, weight: top.length - idx }));
+      const weighted = top.map((x, idx) => ({
+        ...x,
+        weight: top.length - idx,
+      }));
       const pick = this.weightedPick(weighted, rng);
       route.push(pick.item);
       pool.splice(pick.poolIdx, 1);
@@ -538,7 +547,11 @@ export class CourseService {
     let prevPos = start;
     let mealInserted = false;
 
-    const push = (c: Candidate, type: CourseItemType, stayMin: number): void => {
+    const push = (
+      c: Candidate,
+      type: CourseItemType,
+      stayMin: number,
+    ): void => {
       const dist = haversineMeters(prevPos, c.pos);
       const travel = travelMinutes(dist, transport);
       clock += travel;

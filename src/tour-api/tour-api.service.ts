@@ -83,7 +83,9 @@ export class TourApiService {
       res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
     } catch (e) {
       this.logger.error(`TourAPI 네트워크 오류: ${operation}`, e as Error);
-      throw new ServiceUnavailableException('관광 정보 서버 연결에 실패했습니다.');
+      throw new ServiceUnavailableException(
+        '관광 정보 서버 연결에 실패했습니다.',
+      );
     }
 
     if (!res.ok) {
@@ -98,7 +100,9 @@ export class TourApiService {
       json = JSON.parse(text) as TourApiResponse<T>;
     } catch {
       // 키 오류 등은 XML(OpenApiServiceResponse)로 내려오는 경우가 많다.
-      this.logger.error(`TourAPI 응답 파싱 실패(${operation}): ${text.slice(0, 200)}`);
+      this.logger.error(
+        `TourAPI 응답 파싱 실패(${operation}): ${text.slice(0, 200)}`,
+      );
       throw new ServiceUnavailableException(
         '관광 정보 응답을 해석하지 못했습니다. (인증키/파라미터 확인)',
       );
@@ -107,7 +111,9 @@ export class TourApiService {
     const resultCode = json.response?.header?.resultCode;
     if (resultCode !== '0000') {
       const msg = json.response?.header?.resultMsg ?? 'UNKNOWN';
-      this.logger.error(`TourAPI 결과코드 ${resultCode}: ${msg} (${operation})`);
+      this.logger.error(
+        `TourAPI 결과코드 ${resultCode}: ${msg} (${operation})`,
+      );
       throw new ServiceUnavailableException(`관광 정보 조회 실패: ${msg}`);
     }
 

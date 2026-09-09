@@ -22,7 +22,7 @@
 | 반려동물 동반 | `GET /pet-spots`, `/pet-spots/{id}/info` | 동반 가능 장소 목록·동반 조건 |
 | 인증 | `POST /auth/kakao`, `/auth/guest`, `GET /auth/me` | 카카오 로그인 / 게스트(심사용) / 내 정보 |
 | 코스 저장 🔒 | `POST/GET/DELETE /saved-courses` | 생성 코스 저장·조회·삭제 |
-| 찜 🔒 | `POST/GET/DELETE /bookmarks` | 축제·관광지·코스 찜 + D-Day |
+| 찜 🔒 | `POST/GET/DELETE /bookmarks`, `GET /bookmarks/upcoming` | 축제·관광지·코스 찜 + D-Day 임박 목록 |
 | 감성 스탬프 🔒 | `POST/GET /stamps`, `GET /stamps/progress` | 방문 인증 + 5존 완주 리워드 |
 | 동선 매칭 🔒 | `POST /matches/opt-in`, `GET /matches` … | 동일 존·날짜 여행 메이트 (상호 옵트인) |
 

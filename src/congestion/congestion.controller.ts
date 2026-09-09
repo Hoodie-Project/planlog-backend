@@ -1,5 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiProperty,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CongestionService } from './congestion.service';
 
 class WeekdayCongestionDto {
@@ -9,16 +14,27 @@ class WeekdayCongestionDto {
   @ApiProperty({ example: 100, description: '혼잡 지수 0~100' }) index: number;
   @ApiProperty({ example: 'HIGH', enum: ['LOW', 'MEDIUM', 'HIGH'] })
   level: string;
-  @ApiProperty({ example: 845210, description: '요일 평균 관광객 수(외지인+외국인)' })
+  @ApiProperty({
+    example: 845210,
+    description: '요일 평균 관광객 수(외지인+외국인)',
+  })
   avgVisitors: number;
 }
 
 class CongestionResponseDto {
   @ApiProperty({ type: [WeekdayCongestionDto] })
   weekdays: WeekdayCongestionDto[];
-  @ApiProperty({ type: WeekdayCongestionDto, nullable: true, description: '가장 한산한 요일(방문 추천)' })
+  @ApiProperty({
+    type: WeekdayCongestionDto,
+    nullable: true,
+    description: '가장 한산한 요일(방문 추천)',
+  })
   leastBusy: WeekdayCongestionDto | null;
-  @ApiProperty({ type: WeekdayCongestionDto, nullable: true, description: '가장 붐비는 요일' })
+  @ApiProperty({
+    type: WeekdayCongestionDto,
+    nullable: true,
+    description: '가장 붐비는 요일',
+  })
   busiest: WeekdayCongestionDto | null;
 }
 

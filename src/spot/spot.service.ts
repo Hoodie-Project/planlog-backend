@@ -4,7 +4,6 @@ import { TourRawItem } from '../tour-api/tour-api.types';
 import {
   ContentType,
   GANGWON_AREA_CODE,
-  Zone,
   ZONE_META,
 } from '../common/gangwon.constants';
 import { PlaceDto, toPlaceDto } from '../common/dto/place.dto';
@@ -56,22 +55,22 @@ export class SpotService {
   }
 
   /** 관광지 상세 (공통정보) */
-  async findDetail(contentId: string): Promise<PlaceDto & { overview?: string }> {
-    const { items } = await this.tourApi.getList<TourRawItem & { overview?: string }>(
-      KOR_SERVICE,
-      'detailCommon2',
-      {
-        contentId,
-        defaultYN: 'Y',
-        firstImageYN: 'Y',
-        addrinfoYN: 'Y',
-        mapinfoYN: 'Y',
-        overviewYN: 'Y',
-      },
-    );
+  async findDetail(
+    contentId: string,
+  ): Promise<PlaceDto & { overview?: string }> {
+    const { items } = await this.tourApi.getList<
+      TourRawItem & { overview?: string }
+    >(KOR_SERVICE, 'detailCommon2', {
+      contentId,
+      defaultYN: 'Y',
+      firstImageYN: 'Y',
+      addrinfoYN: 'Y',
+      mapinfoYN: 'Y',
+      overviewYN: 'Y',
+    });
     const raw = items[0];
     if (!raw) {
-      return { contentId, contentTypeId: '', title: '' } as PlaceDto;
+      return { contentId, contentTypeId: '', title: '' };
     }
     return { ...toPlaceDto(raw), overview: raw.overview };
   }
@@ -88,11 +87,13 @@ export class SpotService {
 
   /** 강원 시군구 코드 조회 (감성존 상수 검증용 디버그) */
   async findAreaCodes(): Promise<{ code: string; name: string }[]> {
-    const { items } = await this.tourApi.getList<{ code: string; name: string }>(
-      KOR_SERVICE,
-      'areaCode2',
-      { areaCode: GANGWON_AREA_CODE, numOfRows: 50 },
-    );
+    const { items } = await this.tourApi.getList<{
+      code: string;
+      name: string;
+    }>(KOR_SERVICE, 'areaCode2', {
+      areaCode: GANGWON_AREA_CODE,
+      numOfRows: 50,
+    });
     return items.map((i) => ({ code: i.code, name: i.name }));
   }
 

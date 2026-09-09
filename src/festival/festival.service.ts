@@ -3,7 +3,6 @@ import { TourApiService } from '../tour-api/tour-api.service';
 import { TourRawItem } from '../tour-api/tour-api.types';
 import {
   GANGWON_AREA_CODE,
-  Zone,
   ZONE_META,
   inferZone,
 } from '../common/gangwon.constants';

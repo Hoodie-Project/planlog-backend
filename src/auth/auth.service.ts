@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { User } from '../../generated/prisma/client.js';
@@ -34,7 +30,8 @@ export class AuthService {
     const profile = await this.fetchKakaoProfile(accessToken);
     const providerId = String(profile.id);
     const nickname =
-      profile.kakao_account?.profile?.nickname ?? `카카오사용자_${providerId.slice(-4)}`;
+      profile.kakao_account?.profile?.nickname ??
+      `카카오사용자_${providerId.slice(-4)}`;
     const email = profile.kakao_account?.email ?? null;
     const profileImage =
       profile.kakao_account?.profile?.profile_image_url ?? null;
@@ -82,7 +79,9 @@ export class AuthService {
       throw new UnauthorizedException('카카오 인증 서버 연결에 실패했습니다.');
     }
     if (!res.ok) {
-      throw new UnauthorizedException('유효하지 않은 카카오 액세스 토큰입니다.');
+      throw new UnauthorizedException(
+        '유효하지 않은 카카오 액세스 토큰입니다.',
+      );
     }
     return (await res.json()) as KakaoProfile;
   }

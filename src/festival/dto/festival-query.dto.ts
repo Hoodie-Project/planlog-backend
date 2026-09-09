@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBooleanString, IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsBooleanString,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  Max,
+  Min,
+} from 'class-validator';
 import { Zone } from '../../common/gangwon.constants';
 
 export class FestivalQueryDto {

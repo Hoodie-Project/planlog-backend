@@ -78,7 +78,9 @@ export class CreateCourseDto {
     example: '2026-06-13',
   })
   @IsOptional()
-  @Matches(/^\d{4}-\d{2}-\d{2}$/, { message: 'travelDate 는 YYYY-MM-DD 형식이어야 합니다.' })
+  @Matches(/^\d{4}-\d{2}-\d{2}$/, {
+    message: 'travelDate 는 YYYY-MM-DD 형식이어야 합니다.',
+  })
   travelDate?: string;
 
   @ApiPropertyOptional({
@@ -92,7 +94,8 @@ export class CreateCourseDto {
   debug?: boolean;
 
   @ApiPropertyOptional({
-    description: '출발 좌표 경도(X). 뚜벅이 KTX역 출발 등. 생략 시 후보 중심에서 시작',
+    description:
+      '출발 좌표 경도(X). 뚜벅이 KTX역 출발 등. 생략 시 후보 중심에서 시작',
     example: '128.8961',
   })
   @IsOptional()

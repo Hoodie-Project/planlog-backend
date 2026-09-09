@@ -38,7 +38,10 @@ export class CongestionService {
    */
   async getGangwonWeekdayCongestion(): Promise<WeekdayCongestion[]> {
     const rows = await this.fetchGangwonVisitors();
-    const byWeekday = new Map<string, { name: string; sum: number; cnt: number }>();
+    const byWeekday = new Map<
+      string,
+      { name: string; sum: number; cnt: number }
+    >();
     for (const r of rows) {
       if (r.touDivCd === '1') continue; // 현지인 제외 → 관광객만
       const e = byWeekday.get(r.daywkDivCd) ?? {
@@ -78,9 +81,7 @@ export class CongestionService {
   }
 
   /** 특정 날짜(YYYY-MM-DD 또는 YYYYMMDD)의 혼잡도 */
-  async getDateCongestion(
-    date: string,
-  ): Promise<WeekdayCongestion | null> {
+  async getDateCongestion(date: string): Promise<WeekdayCongestion | null> {
     const weekdays = await this.getGangwonWeekdayCongestion();
     if (weekdays.length === 0) return null;
     const code = this.weekdayCode(date);

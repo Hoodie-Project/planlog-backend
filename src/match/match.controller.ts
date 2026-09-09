@@ -38,7 +38,10 @@ export class MateGroupDto {
   @ApiProperty({ example: 'SEA' }) zone: string;
   @ApiProperty({ example: '동해 바다존' }) zoneLabel: string;
   @ApiProperty({ example: '2026-06-20' }) travelDate: string;
-  @ApiProperty({ type: [MateDto], description: '같은 조건으로 옵트인한 메이트' })
+  @ApiProperty({
+    type: [MateDto],
+    description: '같은 조건으로 옵트인한 메이트',
+  })
   mates: MateDto[];
 }
 
@@ -79,7 +82,10 @@ export class MatchController {
   }
 
   @Delete('opt-ins/:id')
-  @ApiOperation({ summary: '옵트인 철회', description: '본인 옵트인만 철회. (JWT 필요)' })
+  @ApiOperation({
+    summary: '옵트인 철회',
+    description: '본인 옵트인만 철회. (JWT 필요)',
+  })
   withdraw(@CurrentUser() user: User, @Param('id') id: string) {
     return this.matchService.withdraw(user.id, id);
   }

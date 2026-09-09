@@ -28,7 +28,12 @@ export class ZoneSpotQueryDto {
   @IsEnum(ContentType)
   contentTypeId?: ContentType = ContentType.TOURIST_SPOT;
 
-  @ApiPropertyOptional({ description: '페이지당 개수', default: 12, minimum: 1, maximum: 50 })
+  @ApiPropertyOptional({
+    description: '페이지당 개수',
+    default: 12,
+    minimum: 1,
+    maximum: 50,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

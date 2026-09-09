@@ -37,6 +37,29 @@ export class BookmarkService {
     });
   }
 
+  /** D-Day 임박 찜 — 오늘부터 withinDays 일 이내(당일 포함) 남은 순으로 정렬 */
+  async findUpcoming(userId: string, withinDays: number) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const until = new Date(today);
+    until.setDate(until.getDate() + withinDays);
+
+    const bookmarks = await this.prisma.bookmark.findMany({
+      where: {
+        userId,
+        dDayDate: { gte: today, lte: until },
+      },
+      orderBy: { dDayDate: 'asc' },
+    });
+
+    return bookmarks.map((b) => ({
+      ...b,
+      daysUntil: Math.round(
+        (b.dDayDate!.getTime() - today.getTime()) / 86_400_000,
+      ),
+    }));
+  }
+
   async remove(userId: string, id: string) {
     const bookmark = await this.prisma.bookmark.findFirst({
       where: { id, userId },
