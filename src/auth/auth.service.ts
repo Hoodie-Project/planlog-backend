@@ -54,13 +54,20 @@ export class AuthService {
     return this.issue(user);
   }
 
-  /** 게스트 계정 발급 (심사·테스트용, 자격증명 없음) */
+  /** 게스트 계정 발급 (심사·테스트용, 고정 계정 재사용) */
   async guestLogin(): Promise<AuthResponseDto> {
-    const suffix = Math.random().toString(36).slice(2, 8);
-    const user = await this.prisma.user.create({
-      data: {
+    const user = await this.prisma.user.upsert({
+      where: {
+        provider_providerId: {
+          provider: AuthProvider.GUEST,
+          providerId: 'guest',
+        },
+      },
+      update: {},
+      create: {
         provider: AuthProvider.GUEST,
-        nickname: `게스트_${suffix}`,
+        providerId: 'guest',
+        nickname: 'Guest',
         isGuest: true,
       },
     });
