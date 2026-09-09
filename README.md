@@ -10,6 +10,8 @@
 
 ## 기능 한눈에 보기
 
+> ⚠️ 모든 엔드포인트는 전역 prefix `/api` 가 붙습니다. 아래 표의 `/courses/generate` 는 실제로 `/api/courses/generate` 입니다.
+
 | 기능 | 엔드포인트 | 설명 |
 |---|---|---|
 | **코스 자동 생성** ⭐ | `POST /courses/generate` | 무드 입력 → 관광지+점심+숙소를 동선·시간표로 자동 설계 (다박·연관동선·혼잡회피·다양성) |
@@ -26,7 +28,7 @@
 | 감성 스탬프 🔒 | `POST/GET /stamps`, `GET /stamps/progress` | 방문 인증 + 5존 완주 리워드 |
 | 동선 매칭 🔒 | `POST /matches/opt-in`, `GET /matches` … | 동일 존·날짜 여행 메이트 (상호 옵트인) |
 
-🔒 = JWT 인증 필요. 전체 요청/응답 규격은 **Swagger** `http://localhost:3000/api-docs`
+🔒 = JWT 인증 필요. 전체 요청/응답 규격은 **Swagger** `http://localhost:9000/api/docs`
 
 ### 강원 5개 감성존
 강원도(`areaCode=32`)를 5개 감성 존으로 재구성 — 거점 시군 + 키워드로 분류 (`src/common/gangwon.constants.ts`)
@@ -118,7 +120,7 @@ docs/ROADMAP.md
 npm install
 docker compose up -d         # MySQL 8
 npx prisma migrate dev       # 스키마 적용
-npm run start:dev            # http://localhost:3000 (Swagger: /api-docs)
+npm run start:dev            # http://localhost:9000 (Swagger: /api/docs)
 ```
 
 ### 환경변수 (`.env`)
