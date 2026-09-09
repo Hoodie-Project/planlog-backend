@@ -16,6 +16,7 @@ import {
 import { AuthService } from './auth.service';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
+import { MeStatsDto } from './dto/me-stats.dto';
 import { JwtAuthGuard } from './jwt-auth.guard';
 import { CurrentUser } from './current-user.decorator';
 import type { User } from '../../generated/prisma/client.js';
@@ -74,5 +75,18 @@ export class AuthController {
       profileImage: user.profileImage,
       isGuest: user.isGuest,
     };
+  }
+
+  @Get('me/stats')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: '마이페이지 요약 통계',
+    description:
+      '저장한 코스/찜/스탬프 개수와 감성존 완주 현황. 유효한 JWT 필요.',
+  })
+  @ApiOkResponse({ type: MeStatsDto })
+  stats(@CurrentUser() user: User) {
+    return this.authService.getStats(user.id);
   }
 }

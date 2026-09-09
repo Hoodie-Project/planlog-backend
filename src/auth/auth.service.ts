@@ -4,6 +4,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { User } from '../../generated/prisma/client.js';
 import { AuthProvider } from '../../generated/prisma/enums.js';
 import { AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
+import { MeStatsDto } from './dto/me-stats.dto';
+import { Zone } from '../common/gangwon.constants';
+
+const TOTAL_ZONE_COUNT = Object.values(Zone).length;
 
 interface KakaoProfile {
   id: number;
@@ -72,6 +76,24 @@ export class AuthService {
       },
     });
     return this.issue(user);
+  }
+
+  /** 마이페이지 요약 통계 */
+  async getStats(userId: string): Promise<MeStatsDto> {
+    const [savedCoursesCount, bookmarksCount, stamps] = await Promise.all([
+      this.prisma.savedCourse.count({ where: { userId } }),
+      this.prisma.bookmark.count({ where: { userId } }),
+      this.prisma.stamp.findMany({ where: { userId }, select: { zone: true } }),
+    ]);
+    const collectedZoneCount = new Set(stamps.map((s) => s.zone)).size;
+
+    return {
+      savedCoursesCount,
+      bookmarksCount,
+      stampsCount: stamps.length,
+      collectedZoneCount,
+      totalZoneCount: TOTAL_ZONE_COUNT,
+    };
   }
 
   private async fetchKakaoProfile(accessToken: string): Promise<KakaoProfile> {
