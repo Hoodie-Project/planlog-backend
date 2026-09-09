@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -15,6 +16,7 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiProperty,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { RecordService } from './record.service';
@@ -34,6 +36,17 @@ export class RecordEntityDto {
   @ApiProperty({ nullable: true }) image: string | null;
   @ApiProperty({ type: [String] }) tags: string[];
   @ApiProperty() createdAt: Date;
+}
+
+export class RecordHighlightDto {
+  @ApiProperty({ description: '순위(1부터)', example: 1 })
+  rank: number;
+
+  @ApiProperty({ description: '오늘의 감정', example: '평온함' })
+  mood: string;
+
+  @ApiProperty({ description: '한 줄 소감', example: '혼자였지만 충분했던 하루' })
+  quote: string;
 }
 
 @ApiTags('여행 기록 카드 (Record)')
@@ -63,6 +76,26 @@ export class RecordController {
   @ApiOkResponse({ type: [RecordEntityDto] })
   findAll(@CurrentUser() user: User) {
     return this.recordService.findAll(user.id);
+  }
+
+  @Get('highlights')
+  @ApiOperation({
+    summary: '동행자 감정 후기 (기록 하이라이트)',
+    description:
+      'mood(오늘의 감정)를 남긴 기록 중 최근 순 상위 N개를 랭킹 형태로 반환. 색상 등 표현은 프론트에서 mood 값 기준으로 매핑. (JWT 필요)',
+  })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: '최대 개수(기본 3, 1~10)',
+  })
+  @ApiOkResponse({ type: [RecordHighlightDto] })
+  getHighlights(@CurrentUser() user: User, @Query('limit') limitRaw?: string) {
+    const parsed = Number(limitRaw);
+    const limit = Number.isFinite(parsed)
+      ? Math.min(10, Math.max(1, Math.trunc(parsed)))
+      : 3;
+    return this.recordService.getHighlights(user.id, limit);
   }
 
   @Get(':id')

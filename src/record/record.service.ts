@@ -42,4 +42,19 @@ export class RecordService {
     await this.prisma.travelRecord.delete({ where: { id } });
     return { success: true };
   }
+
+  /** mood 를 남긴 최근 기록 상위 N개를 랭킹 형태로 — "동행자 감정 후기" 카드용 */
+  async getHighlights(userId: string, limit = 3) {
+    const records = await this.prisma.travelRecord.findMany({
+      where: { userId, mood: { not: null } },
+      orderBy: { travelDate: 'desc' },
+      take: limit,
+      select: { mood: true, note: true },
+    });
+    return records.map((r, idx) => ({
+      rank: idx + 1,
+      mood: r.mood as string,
+      quote: r.note,
+    }));
+  }
 }
