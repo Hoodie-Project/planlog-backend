@@ -36,10 +36,12 @@ model User {
   // 같은 제공자 내에서 providerId 중복 방지 (MySQL은 NULL 다중 허용 → 게스트 무제한)
   @@unique([provider, providerId])
 
-  savedCourses SavedCourse[]
-  bookmarks    Bookmark[]
-  stamps       Stamp[]
-  matchOptIns  MatchOptIn[]
+  savedCourses         SavedCourse[]
+  bookmarks            Bookmark[]
+  stamps               Stamp[]
+  matchOptIns          MatchOptIn[]
+  notificationSettings NotificationSettings?
+  courseFeedbacks      CourseFeedback[]
 }
 
 /// 찜 대상 유형
@@ -110,4 +112,28 @@ model MatchOptIn {
 
   @@unique([userId, zone, travelDate])
   @@index([zone, travelDate])
+}
+
+/// 알림 설정 (마이페이지) — 유저당 1개, 최초 조회 시 기본값으로 생성
+model NotificationSettings {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ddayAlert      Boolean  @default(true)
+  festivalAlert  Boolean  @default(true)
+  courseReminder Boolean  @default(true)
+  updatedAt      DateTime @updatedAt
+}
+
+/// 코스 결과 피드백 — 프리셋 선택지(courseFeedbackOptions) 기반 개선 요청 로그
+model CourseFeedback {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  zone      String
+  /// 선택한 프리셋 문구 배열(JSON), 예: ["더 여유로운 코스로", "걷는 시간 줄이기"]
+  options   Json
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }

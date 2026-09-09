@@ -16,6 +16,8 @@ import { StampModule } from './stamp/stamp.module';
 import { MatchModule } from './match/match.module';
 import { RelatedModule } from './related/related.module';
 import { PetModule } from './pet/pet.module';
+import { NotificationSettingsModule } from './notification-settings/notification-settings.module';
+import { CourseFeedbackModule } from './course-feedback/course-feedback.module';
 
 @Module({
   imports: [
@@ -35,6 +37,8 @@ import { PetModule } from './pet/pet.module';
     MatchModule,
     RelatedModule,
     PetModule,
+    NotificationSettingsModule,
+    CourseFeedbackModule,
   ],
   controllers: [AppController],
 })
