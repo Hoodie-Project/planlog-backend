@@ -3,6 +3,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export enum RecentActivityType {
   SAVED_COURSE = 'SAVED_COURSE',
   STAMP = 'STAMP',
+  RECORD = 'RECORD',
 }
 
 export class RecentActivityDto {

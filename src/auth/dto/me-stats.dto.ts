@@ -15,4 +15,7 @@ export class MeStatsDto {
 
   @ApiProperty({ description: '전체 감성존 개수', example: 5 })
   totalZoneCount: number;
+
+  @ApiProperty({ description: '작성한 기록 카드 개수', example: 7 })
+  recordsCount: number;
 }

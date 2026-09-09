@@ -81,11 +81,16 @@ export class AuthService {
 
   /** 마이페이지 요약 통계 */
   async getStats(userId: string): Promise<MeStatsDto> {
-    const [savedCoursesCount, bookmarksCount, stamps] = await Promise.all([
-      this.prisma.savedCourse.count({ where: { userId } }),
-      this.prisma.bookmark.count({ where: { userId } }),
-      this.prisma.stamp.findMany({ where: { userId }, select: { zone: true } }),
-    ]);
+    const [savedCoursesCount, bookmarksCount, stamps, recordsCount] =
+      await Promise.all([
+        this.prisma.savedCourse.count({ where: { userId } }),
+        this.prisma.bookmark.count({ where: { userId } }),
+        this.prisma.stamp.findMany({
+          where: { userId },
+          select: { zone: true },
+        }),
+        this.prisma.travelRecord.count({ where: { userId } }),
+      ]);
     const collectedZoneCount = new Set(stamps.map((s) => s.zone)).size;
 
     return {
@@ -94,15 +99,16 @@ export class AuthService {
       stampsCount: stamps.length,
       collectedZoneCount,
       totalZoneCount: TOTAL_ZONE_COUNT,
+      recordsCount,
     };
   }
 
-  /** 저장한 코스/스탬프 최근 활동을 시간순으로 병합 ("나의 기록" 최근 활동 피드용) */
+  /** 저장한 코스/스탬프/기록 카드 최근 활동을 시간순으로 병합 ("나의 기록" 최근 활동 피드용) */
   async getRecentActivities(
     userId: string,
     limit = 10,
   ): Promise<RecentActivityDto[]> {
-    const [savedCourses, stamps] = await Promise.all([
+    const [savedCourses, stamps, records] = await Promise.all([
       this.prisma.savedCourse.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -114,6 +120,12 @@ export class AuthService {
         orderBy: { visitedAt: 'desc' },
         take: limit,
         select: { title: true, visitedAt: true },
+      }),
+      this.prisma.travelRecord.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take: limit,
+        select: { title: true, createdAt: true },
       }),
     ]);
 
@@ -127,6 +139,11 @@ export class AuthService {
         type: RecentActivityType.STAMP,
         title: `${s.title} 스탬프 획득`,
         occurredAt: s.visitedAt,
+      })),
+      ...records.map((r) => ({
+        type: RecentActivityType.RECORD,
+        title: `${r.title} 기록 카드 작성`,
+        occurredAt: r.createdAt,
       })),
     ];
 
