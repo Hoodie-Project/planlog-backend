@@ -22,6 +22,16 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { User } from '../../generated/prisma/client.js';
 
+export class StampProgressDto {
+  @ApiProperty({
+    description: '이 코스 스팟 중 이미 스탬프 찍은 개수',
+    example: 3,
+  })
+  earned: number;
+  @ApiProperty({ description: '이 코스의 전체 스팟 개수', example: 5 })
+  total: number;
+}
+
 export class SavedCourseEntityDto {
   @ApiProperty({ example: 'cmq7x...' }) id: string;
   @ApiProperty() userId: string;
@@ -35,6 +45,12 @@ export class SavedCourseEntityDto {
     description: '대기중(날짜 미정)/진행중(날짜만 정함)/완료(리뷰 작성함)',
   })
   status: SavedCourseStatus;
+  @ApiProperty({
+    type: StampProgressDto,
+    description:
+      '이 코스 스팟 대비 스탬프 진행률(리뷰 작성 전에도 contentId 대조로 계산)',
+  })
+  stampProgress: StampProgressDto;
   @ApiProperty({
     description: '저장된 코스(CourseDto) 스냅샷',
     type: 'object',
@@ -108,7 +124,8 @@ export class SavedCourseController {
   @Get(':id')
   @ApiOperation({
     summary: '저장 코스 상세',
-    description: 'payload 에 코스 전체가 들어있음. (JWT 필요)',
+    description:
+      'payload 에 코스 전체가 들어있음. stampProgress 로 이 코스 스탬프 진행률(예: 3/5) 확인 가능. (JWT 필요)',
   })
   @ApiOkResponse({ type: SavedCourseEntityDto })
   findOne(@CurrentUser() user: User, @Param('id') id: string) {

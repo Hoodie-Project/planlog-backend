@@ -2,6 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../generated/prisma/client.js';
 import { CreateSavedCourseDto } from './dto/create-saved-course.dto';
+import { CourseDto, CourseItemType } from '../course/dto/course.dto';
+
+export interface StampProgress {
+  /** 이 코스 스팟 중 이미 스탬프 찍은 개수 */
+  earned: number;
+  /** 이 코스의 전체 스팟 개수 */
+  total: number;
+}
 
 /** 저장한 코스 상태 — DB엔 저장하지 않고 travelDate/리뷰 존재 여부로 매번 계산 */
 export enum SavedCourseStatus {
@@ -32,17 +40,19 @@ export class SavedCourseService {
 
   /** 최신순. status 를 주면 대기중/진행중/완료로 필터링(목록 상단 필터 칩용) */
   async findAll(userId: string, status?: SavedCourseStatus) {
-    const [courses, completedIds] = await Promise.all([
+    const [courses, completedIds, stampedContentIds] = await Promise.all([
       this.prisma.savedCourse.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
       }),
       this.getCompletedIds(userId),
+      this.getStampedContentIds(userId),
     ]);
 
     const withStatus = courses.map((c) => ({
       ...c,
       status: this.resolveStatus(c.travelDate, completedIds.has(c.id)),
+      stampProgress: this.computeStampProgress(c.payload, stampedContentIds),
     }));
 
     return status ? withStatus.filter((c) => c.status === status) : withStatus;
@@ -50,7 +60,10 @@ export class SavedCourseService {
 
   /** "다가오는 여행" — 날짜를 정했고 아직 완료(리뷰) 안 한 것 중 가장 가까운 순 */
   async findUpcoming(userId: string, limit = 1) {
-    const completedIds = await this.getCompletedIds(userId);
+    const [completedIds, stampedContentIds] = await Promise.all([
+      this.getCompletedIds(userId),
+      this.getStampedContentIds(userId),
+    ]);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -65,6 +78,7 @@ export class SavedCourseService {
       .map((c) => ({
         ...c,
         status: SavedCourseStatus.IN_PROGRESS as const,
+        stampProgress: this.computeStampProgress(c.payload, stampedContentIds),
         daysUntil: Math.round(
           (c.travelDate!.getTime() - today.getTime()) / 86_400_000,
         ),
@@ -76,12 +90,19 @@ export class SavedCourseService {
       where: { id, userId },
     });
     if (!course) throw new NotFoundException('저장된 코스를 찾을 수 없습니다.');
-    const completedIds = await this.getCompletedIds(userId);
+    const [completedIds, stampedContentIds] = await Promise.all([
+      this.getCompletedIds(userId),
+      this.getStampedContentIds(userId),
+    ]);
     return {
       ...course,
       status: this.resolveStatus(
         course.travelDate,
         completedIds.has(course.id),
+      ),
+      stampProgress: this.computeStampProgress(
+        course.payload,
+        stampedContentIds,
       ),
     };
   }
@@ -109,5 +130,35 @@ export class SavedCourseService {
     return travelDate
       ? SavedCourseStatus.IN_PROGRESS
       : SavedCourseStatus.PENDING;
+  }
+
+  /** 유저가 실제로 찍은 스탬프의 contentId 집합 (리뷰 작성 여부와 무관) */
+  private async getStampedContentIds(userId: string): Promise<Set<string>> {
+    const stamps = await this.prisma.stamp.findMany({
+      where: { userId },
+      select: { contentId: true },
+    });
+    return new Set(stamps.map((s) => s.contentId));
+  }
+
+  /**
+   * 저장 코스 payload(CourseDto 스냅샷)의 스팟 목록과 유저의 스탬프를 contentId 기준으로 대조.
+   * Stamp 테이블엔 savedCourseId 가 없어(리뷰 작성 시에만 연결) 매번 이렇게 계산한다.
+   */
+  private computeStampProgress(
+    payload: Prisma.JsonValue,
+    stampedContentIds: Set<string>,
+  ): StampProgress {
+    const course = payload as unknown as CourseDto;
+    const spotContentIds = (course.days ?? []).flatMap((day) =>
+      (day.items ?? [])
+        .filter((item) => item.type === CourseItemType.SPOT)
+        .map((item) => item.contentId),
+    );
+    const total = spotContentIds.length;
+    const earned = spotContentIds.filter((id) =>
+      stampedContentIds.has(id),
+    ).length;
+    return { earned, total };
   }
 }
