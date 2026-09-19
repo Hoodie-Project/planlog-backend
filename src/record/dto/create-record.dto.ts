@@ -53,4 +53,22 @@ export class CreateRecordDto {
   @ArrayMaxSize(10)
   @IsString({ each: true })
   tags: string[];
+
+  @ApiPropertyOptional({
+    description:
+      '이 기록의 근거가 된 저장 코스 ID(선택). 지정하면 코스의 방문 장소 수/총 이동거리/박수를 스냅샷으로 함께 저장합니다.',
+  })
+  @IsOptional()
+  @IsString()
+  savedCourseId?: string;
+
+  @ApiPropertyOptional({
+    description: '이 기록에서 획득한 것으로 표시할 스탬프 ID 목록(선택, 본인 스탬프만 연결 가능)',
+    type: [String],
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  stampIds?: string[];
 }

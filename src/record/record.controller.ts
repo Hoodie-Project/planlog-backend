@@ -25,6 +25,15 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { User } from '../../generated/prisma/client.js';
 
+export class RecordStampDto {
+  @ApiProperty() id: string;
+  @ApiProperty() zone: string;
+  @ApiProperty() contentId: string;
+  @ApiProperty() title: string;
+  @ApiProperty({ nullable: true }) image: string | null;
+  @ApiProperty() visitedAt: Date;
+}
+
 export class RecordEntityDto {
   @ApiProperty() id: string;
   @ApiProperty() userId: string;
@@ -36,6 +45,21 @@ export class RecordEntityDto {
   @ApiProperty({ nullable: true }) image: string | null;
   @ApiProperty({ type: [String] }) tags: string[];
   @ApiProperty() createdAt: Date;
+
+  @ApiProperty({ nullable: true, description: '근거가 된 저장 코스 ID' })
+  savedCourseId: string | null;
+
+  @ApiProperty({ nullable: true, description: '방문 장소 수 (저장 코스 스냅샷)' })
+  spotCount: number | null;
+
+  @ApiProperty({ nullable: true, description: '총 이동 거리(m) (저장 코스 스냅샷)' })
+  totalDistance: number | null;
+
+  @ApiProperty({ nullable: true, description: '박수 (저장 코스 스냅샷)' })
+  nights: number | null;
+
+  @ApiProperty({ type: [RecordStampDto], description: '이 기록에서 획득한 스탬프' })
+  stamps: RecordStampDto[];
 }
 
 export class RecordHighlightDto {

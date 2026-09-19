@@ -33,9 +33,6 @@ model User {
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
-  // 같은 제공자 내에서 providerId 중복 방지 (MySQL은 NULL 다중 허용 → 게스트 무제한)
-  @@unique([provider, providerId])
-
   savedCourses         SavedCourse[]
   bookmarks            Bookmark[]
   stamps               Stamp[]
@@ -43,6 +40,9 @@ model User {
   notificationSettings NotificationSettings?
   courseFeedbacks      CourseFeedback[]
   travelRecords        TravelRecord[]
+
+  // 같은 제공자 내에서 providerId 중복 방지 (MySQL은 NULL 다중 허용 → 게스트 무제한)
+  @@unique([provider, providerId])
 }
 
 /// 찜 대상 유형
@@ -63,6 +63,8 @@ model SavedCourse {
   /// 생성 당시 CourseDto 전체 (관광 원본은 contentId 참조이므로 스냅샷 보관 OK)
   payload   Json
   createdAt DateTime @default(now())
+
+  travelRecords TravelRecord[]
 
   @@index([userId])
 }
@@ -96,6 +98,8 @@ model Stamp {
   title     String
   image     String?
   visitedAt DateTime @default(now())
+
+  travelRecords TravelRecord[]
 
   // 같은 관광지는 한 번만 스탬프
   @@unique([userId, contentId])
@@ -157,5 +161,20 @@ model TravelRecord {
   tags       Json
   createdAt  DateTime @default(now())
 
+  /// 이 기록의 근거가 된 저장 코스(선택) — 코스가 나중에 삭제돼도 기록은 남도록 SetNull
+  savedCourseId String?
+  savedCourse   SavedCourse? @relation(fields: [savedCourseId], references: [id], onDelete: SetNull)
+
+  /// savedCourse 생성 시점 CourseDto 스냅샷에서 뽑아온 요약 통계(방문 장소 수/총 이동거리/박수).
+  /// savedCourse가 나중에 삭제돼도 화면에 표시할 값이 남도록 기록 생성 시 값을 복사해 저장한다.
+  spotCount     Int?
+  /// 총 이동 거리(m)
+  totalDistance Int?
+  nights        Int?
+
+  /// 이 기록에서 획득한 것으로 표시할 스탬프들
+  stamps Stamp[]
+
   @@index([userId])
+  @@index([savedCourseId])
 }
