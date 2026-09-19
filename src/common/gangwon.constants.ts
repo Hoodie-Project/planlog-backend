@@ -23,10 +23,12 @@ export enum Transport {
   CAR = 'CAR',
 }
 
-/** 여행 스타일 (혼자/반려동물) */
+/** 여행 스타일 (혼자/가족/반려동물/여유롭게) */
 export enum Style {
   SOLO = 'SOLO',
+  FAMILY = 'FAMILY',
   PET = 'PET',
+  CALM = 'CALM',
 }
 
 /** KorService2 contentTypeId */

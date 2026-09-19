@@ -28,13 +28,29 @@ export class CreateCourseDto {
   transport?: Transport = Transport.WALK;
 
   @ApiPropertyOptional({
-    description: '여행 스타일 (혼자/반려동물)',
+    description:
+      '여행 스타일 (혼자/가족과 함께/반려동물과 함께/조용히 쉬고 싶어요). ' +
+      'FAMILY는 한 구간 이동거리를 줄이고 체류시간을 늘려 여유롭게, ' +
+      'CALM은 붐비는 인기(연관관광지 다발) 스팟보다 한적한 장소를 우선해요.',
     enum: Style,
     default: Style.SOLO,
   })
   @IsOptional()
   @IsEnum(Style)
   style?: Style = Style.SOLO;
+
+  @ApiPropertyOptional({
+    description:
+      '여행 시작(도착) 시각 HH:mm, 24시간제(선택). 생략하면 10:00부터 시작. ' +
+      '이 시각을 기준으로 첫 장소 도착 시각과 이후 시간표가 정해져요.',
+    example: '10:00',
+    default: '10:00',
+  })
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):([0-5]\d)$/, {
+    message: 'startTime 은 HH:mm(24시간제) 형식이어야 합니다.',
+  })
+  startTime?: string;
 
   @ApiPropertyOptional({
     description: '하루당 관광지 개수 (점심·숙소는 별도로 추가됨)',

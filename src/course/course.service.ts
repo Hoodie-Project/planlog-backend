@@ -42,9 +42,15 @@ interface Candidate {
 type Rng = () => number;
 
 const SPOT_STAY_MIN = 90; // 관광지 체류
+const FAMILY_SPOT_STAY_MIN = 120; // 가족과 함께: 체류시간을 넉넉하게
 const MEAL_STAY_MIN = 60; // 점심 체류
-const DAY_START = 10 * 60; // 10:00 (분)
+const DAY_START = 10 * 60; // 기본 시작 시각 10:00 (분)
 const LUNCH_AFTER = 13 * 60; // 13:00 넘으면 점심 삽입
+const FAMILY_LEG_RATIO = 0.6; // 가족과 함께: 한 구간 최대 이동거리 축소 비율
+/** 조용히 쉬고 싶어요: 스팟 단위 혼잡도 데이터가 없어 "연관관광지 다발(=인기) 스팟"을
+ *  혼잡 가능성이 높은 곳으로 보고 감점하는 근사치를 사용한다. */
+const CALM_POPULARITY_PENALTY = -10;
+const DEFAULT_POPULARITY_BONUS = 10;
 
 @Injectable()
 export class CourseService {
@@ -68,7 +74,10 @@ export class CourseService {
     const nights = dto.nights ?? 0;
     const dayCount = nights + 1;
     const rng = this.makeRng(dto.seed);
-    const maxLeg = this.maxLegMeters(transport);
+    const maxLeg = this.maxLegMeters(transport, style);
+    const dayStart = this.parseStartTime(dto.startTime) ?? DAY_START;
+    const spotStayMin =
+      style === Style.FAMILY ? FAMILY_SPOT_STAY_MIN : SPOT_STAY_MIN;
 
     const [defaultSpots, restaurantPool, stayPool] = await Promise.all([
       this.collect(zone, ContentType.TOURIST_SPOT),
@@ -95,10 +104,17 @@ export class CourseService {
     for (const c of spotPool) {
       nameIndex.set(normalizeSpotName(c.raw.title), c);
     }
-    // 연관 데이터의 기준 관광지(잘 연결된 인기 스팟)에 점수 가산 → 동선이 그쪽으로 쏠려 매칭률↑
+    // 연관 데이터의 기준 관광지(잘 연결된 인기 스팟)에 점수 가감
+    // → 기본은 가산(동선이 그쪽으로 쏠려 매칭률↑), CALM(조용히 쉬고 싶어요)은
+    //   인기 스팟일수록 혼잡할 가능성이 높다고 보고 감점(한적한 장소 우선)
     if (relatedMap.size > 0) {
+      const popularityDelta =
+        style === Style.CALM
+          ? CALM_POPULARITY_PENALTY
+          : DEFAULT_POPULARITY_BONUS;
       for (const c of spotPool) {
-        if (relatedMap.has(normalizeSpotName(c.raw.title))) c.score += 10;
+        if (relatedMap.has(normalizeSpotName(c.raw.title)))
+          c.score += popularityDelta;
       }
     }
     const legs: RelatedLegDto[] = [];
@@ -150,6 +166,8 @@ export class CourseService {
         stay,
         anchor,
         transport,
+        dayStart,
+        spotStayMin,
       );
       const distance = items.reduce((s, it) => s + it.distanceFromPrev, 0);
       const travel = items.reduce((s, it) => s + it.travelMinutesFromPrev, 0);
@@ -214,7 +232,8 @@ export class CourseService {
       params;
     const reasons: string[] = [];
     const spotCount = days.reduce(
-      (s, d) => s + d.items.filter((i) => i.type === CourseItemType.SPOT).length,
+      (s, d) =>
+        s + d.items.filter((i) => i.type === CourseItemType.SPOT).length,
       0,
     );
 
@@ -224,6 +243,14 @@ export class CourseService {
 
     if (style === Style.PET) {
       reasons.push('반려동물 동반 가능한 장소를 우선 선정했어요.');
+    }
+    if (style === Style.FAMILY) {
+      reasons.push(
+        '이동 부담을 줄이기 위해 한 구간 거리를 좁히고, 머무는 시간은 넉넉하게 짰어요.',
+      );
+    }
+    if (style === Style.CALM) {
+      reasons.push('붐비는 인기 스팟보다 한적한 장소 위주로 구성했어요.');
     }
 
     reasons.push(
@@ -388,18 +415,32 @@ export class CourseService {
     return out;
   }
 
-  /** 이동수단별 한 구간 최대 이동 거리(m) */
-  private maxLegMeters(transport: Transport): number {
-    switch (transport) {
-      case Transport.WALK:
-        return 2500; // 도보 ~35분
-      case Transport.KTX:
-        return 6000; // 역+도보/대중교통
-      case Transport.CAR:
-        return 30000; // 렌터카
-      default:
-        return 2500;
-    }
+  /**
+   * 이동수단별 한 구간 최대 이동 거리(m).
+   * FAMILY(가족과 함께)는 이동 부담을 줄이기 위해 구간을 더 촘촘하게 잡는다.
+   */
+  private maxLegMeters(transport: Transport, style: Style): number {
+    const base = (() => {
+      switch (transport) {
+        case Transport.WALK:
+          return 2500; // 도보 ~35분
+        case Transport.KTX:
+          return 6000; // 역+도보/대중교통
+        case Transport.CAR:
+          return 30000; // 렌터카
+        default:
+          return 2500;
+      }
+    })();
+    return style === Style.FAMILY ? Math.round(base * FAMILY_LEG_RATIO) : base;
+  }
+
+  /** "HH:mm" → 자정 기준 분. 형식이 아니면 null(호출부에서 기본값 10:00 사용) */
+  private parseStartTime(time?: string): number | null {
+    if (!time) return null;
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(time);
+    if (!m) return null;
+    return Number(m[1]) * 60 + Number(m[2]);
   }
 
   /** seed 있으면 결정적(mulberry32), 없으면 매번 다른 난수 생성기 */
@@ -606,9 +647,11 @@ export class CourseService {
     stay: Candidate | null,
     start: LatLng,
     transport: Transport,
+    dayStart: number,
+    spotStayMin: number,
   ): CourseItemDto[] {
     const items: CourseItemDto[] = [];
-    let clock = DAY_START;
+    let clock = dayStart;
     let prevPos = start;
     let mealInserted = false;
 
@@ -645,7 +688,7 @@ export class CourseService {
         push(meal, CourseItemType.MEAL, MEAL_STAY_MIN);
         mealInserted = true;
       }
-      push(spot, CourseItemType.SPOT, SPOT_STAY_MIN);
+      push(spot, CourseItemType.SPOT, spotStayMin);
     }
     if (!mealInserted && meal) {
       push(meal, CourseItemType.MEAL, MEAL_STAY_MIN);
