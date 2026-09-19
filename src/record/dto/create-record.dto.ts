@@ -2,11 +2,14 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   ArrayMaxSize,
   IsArray,
+  IsEnum,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
 } from 'class-validator';
+import { Zone } from '../../common/gangwon.constants';
+import { Mood } from '../../common/mood.constants';
 
 export class CreateRecordDto {
   @ApiProperty({ description: '기록 제목', example: '강릉 바다 감성 코스' })
@@ -26,6 +29,15 @@ export class CreateRecordDto {
   location: string;
 
   @ApiProperty({
+    enum: Zone,
+    description:
+      '이 리뷰가 속한 코스의 감성존. "나의 기록" 여행 성향 집계에 사용.',
+    example: Zone.SEA,
+  })
+  @IsEnum(Zone)
+  zone: Zone;
+
+  @ApiProperty({
     description: '한 줄 소감',
     example: '파도 소리만으로도 충분했던 하루',
   })
@@ -33,11 +45,14 @@ export class CreateRecordDto {
   @MaxLength(500)
   note: string;
 
-  @ApiPropertyOptional({ description: '오늘의 감정(자유 입력)', example: '평온함' })
+  @ApiPropertyOptional({
+    enum: Mood,
+    description: '오늘의 감정(고정 8종 중 1개, "리뷰하기" 모달 감정 선택)',
+    example: Mood.CALM,
+  })
   @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  mood?: string;
+  @IsEnum(Mood)
+  mood?: Mood;
 
   @ApiPropertyOptional({ description: '대표 이미지 URL' })
   @IsOptional()
@@ -63,7 +78,8 @@ export class CreateRecordDto {
   savedCourseId?: string;
 
   @ApiPropertyOptional({
-    description: '이 기록에서 획득한 것으로 표시할 스탬프 ID 목록(선택, 본인 스탬프만 연결 가능)',
+    description:
+      '이 기록에서 획득한 것으로 표시할 스탬프 ID 목록(선택, 본인 스탬프만 연결 가능)',
     type: [String],
   })
   @IsOptional()

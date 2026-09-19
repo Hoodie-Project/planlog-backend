@@ -23,6 +23,8 @@ import { RecordService } from './record.service';
 import { CreateRecordDto } from './dto/create-record.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { Zone } from '../common/gangwon.constants';
+import { Mood } from '../common/mood.constants';
 import type { User } from '../../generated/prisma/client.js';
 
 export class RecordStampDto {
@@ -40,8 +42,9 @@ export class RecordEntityDto {
   @ApiProperty() title: string;
   @ApiProperty() travelDate: Date;
   @ApiProperty() location: string;
+  @ApiProperty({ enum: Zone }) zone: Zone;
   @ApiProperty() note: string;
-  @ApiProperty({ nullable: true }) mood: string | null;
+  @ApiProperty({ enum: Mood, nullable: true }) mood: Mood | null;
   @ApiProperty({ nullable: true }) image: string | null;
   @ApiProperty({ type: [String] }) tags: string[];
   @ApiProperty() createdAt: Date;
@@ -49,27 +52,71 @@ export class RecordEntityDto {
   @ApiProperty({ nullable: true, description: '근거가 된 저장 코스 ID' })
   savedCourseId: string | null;
 
-  @ApiProperty({ nullable: true, description: '방문 장소 수 (저장 코스 스냅샷)' })
+  @ApiProperty({
+    nullable: true,
+    description: '방문 장소 수 (저장 코스 스냅샷)',
+  })
   spotCount: number | null;
 
-  @ApiProperty({ nullable: true, description: '총 이동 거리(m) (저장 코스 스냅샷)' })
+  @ApiProperty({
+    nullable: true,
+    description: '총 이동 거리(m) (저장 코스 스냅샷)',
+  })
   totalDistance: number | null;
 
   @ApiProperty({ nullable: true, description: '박수 (저장 코스 스냅샷)' })
   nights: number | null;
 
-  @ApiProperty({ type: [RecordStampDto], description: '이 기록에서 획득한 스탬프' })
+  @ApiProperty({
+    type: [RecordStampDto],
+    description: '이 기록에서 획득한 스탬프',
+  })
   stamps: RecordStampDto[];
+}
+
+class RecordZoneTraitDto {
+  @ApiProperty({ enum: Zone, example: Zone.SEA }) zone: Zone;
+  @ApiProperty({ example: '동해 바다존' }) label: string;
+  @ApiProperty({ description: '해당 존 리뷰 수', example: 3 }) count: number;
+  @ApiProperty({ description: '전체 리뷰 중 비중(%)', example: 42 })
+  percent: number;
+}
+
+class RecordTravelTypeDto {
+  @ApiProperty({ enum: Zone, example: Zone.SEA }) zone: Zone;
+  @ApiProperty({ description: '기준이 된 존의 비중(%)', example: 72 })
+  percent: number;
+  @ApiProperty({ example: '조용한 바다 산책형' }) title: string;
+  @ApiProperty({ example: '여유롭게 바다를 거닐며 충전하는 여행자' })
+  description: string;
+}
+
+export class RecordTraitsDto {
+  @ApiProperty({ example: 7 }) totalRecords: number;
+  @ApiProperty({
+    type: [RecordZoneTraitDto],
+    description: '감성존 고정 순서(SEA/SNOW/VALLEY/RETRO/PHOTO)',
+  })
+  traits: RecordZoneTraitDto[];
+  @ApiProperty({
+    type: RecordTravelTypeDto,
+    nullable: true,
+    description: '가장 비중이 높은 존 기준 대표 여행 유형. 리뷰가 없으면 null',
+  })
+  travelType: RecordTravelTypeDto | null;
 }
 
 export class RecordHighlightDto {
   @ApiProperty({ description: '순위(1부터)', example: 1 })
   rank: number;
 
-  @ApiProperty({ description: '오늘의 감정', example: '평온함' })
-  mood: string;
+  @ApiProperty({ enum: Mood, description: '오늘의 감정', example: Mood.CALM })
+  mood: Mood;
 
-  @ApiProperty({ description: '한 줄 소감', example: '혼자였지만 충분했던 하루' })
+  @ApiProperty({
+    description: '한 줄 소감',
+    example: '혼자였지만 충분했던 하루',
+  })
   quote: string;
 }
 
@@ -102,6 +149,17 @@ export class RecordController {
     return this.recordService.findAll(user.id);
   }
 
+  @Get('traits')
+  @ApiOperation({
+    summary: '여행 리뷰 기반 여행 성향',
+    description:
+      '완료한 코스에 남긴 기록(리뷰)의 감성존 분포와, 가장 비중이 높은 존 기준 대표 여행 유형(타이틀/설명)을 반환. "나의 기록" 페이지 여행 성향 그래프·뱃지용. (JWT 필요)',
+  })
+  @ApiOkResponse({ type: RecordTraitsDto })
+  getTraits(@CurrentUser() user: User) {
+    return this.recordService.getTraits(user.id);
+  }
+
   @Get('highlights')
   @ApiOperation({
     summary: '동행자 감정 후기 (기록 하이라이트)',
@@ -130,7 +188,10 @@ export class RecordController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: '기록 카드 삭제', description: '본인 기록만 삭제. (JWT 필요)' })
+  @ApiOperation({
+    summary: '기록 카드 삭제',
+    description: '본인 기록만 삭제. (JWT 필요)',
+  })
   remove(@CurrentUser() user: User, @Param('id') id: string) {
     return this.recordService.remove(user.id, id);
   }

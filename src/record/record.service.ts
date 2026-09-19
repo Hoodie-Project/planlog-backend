@@ -3,6 +3,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../generated/prisma/client.js';
 import { CreateRecordDto } from './dto/create-record.dto';
 import { CourseDto, CourseItemType } from '../course/dto/course.dto';
+import { Zone, ZONE_META, ZONE_TRAVEL_TYPE } from '../common/gangwon.constants';
+import { Mood } from '../common/mood.constants';
+
+const ALL_ZONES = Object.values(Zone);
 
 const RECORD_INCLUDE = {
   stamps: {
@@ -42,15 +46,18 @@ export class RecordService {
         title: dto.title,
         travelDate: new Date(dto.travelDate),
         location: dto.location,
+        zone: dto.zone,
         note: dto.note,
         mood: dto.mood,
         image: dto.image,
-        tags: dto.tags as Prisma.InputJsonValue,
+        tags: dto.tags,
         savedCourseId: dto.savedCourseId,
         spotCount: courseStats?.spotCount,
         totalDistance: courseStats?.totalDistance,
         nights: courseStats?.nights,
-        stamps: stampIds.length ? { connect: stampIds.map((id) => ({ id })) } : undefined,
+        stamps: stampIds.length
+          ? { connect: stampIds.map((id) => ({ id })) }
+          : undefined,
       },
       include: RECORD_INCLUDE,
     });
@@ -68,7 +75,9 @@ export class RecordService {
     const course = savedCourse.payload as unknown as CourseDto;
     const spotCount = (course.days ?? []).reduce(
       (sum, day) =>
-        sum + (day.items ?? []).filter((item) => item.type === CourseItemType.SPOT).length,
+        sum +
+        (day.items ?? []).filter((item) => item.type === CourseItemType.SPOT)
+          .length,
       0,
     );
     return {
@@ -101,6 +110,48 @@ export class RecordService {
     return { success: true };
   }
 
+  /**
+   * 완료한 코스 리뷰(TravelRecord)의 감성존 분포 + 대표 여행 유형.
+   * 리뷰가 하나도 없으면 전부 0%, travelType 은 null.
+   * "나의 기록" 페이지 여행 성향 그래프/뱃지용.
+   */
+  async getTraits(userId: string) {
+    const records = await this.prisma.travelRecord.findMany({
+      where: { userId },
+      select: { zone: true },
+    });
+    const total = records.length;
+    const countByZone = new Map<string, number>();
+    for (const r of records) {
+      countByZone.set(r.zone, (countByZone.get(r.zone) ?? 0) + 1);
+    }
+
+    const traits = ALL_ZONES.map((zone) => {
+      const count = countByZone.get(zone) ?? 0;
+      return {
+        zone,
+        label: ZONE_META[zone].label,
+        count,
+        percent: total > 0 ? Math.round((count / total) * 100) : 0,
+      };
+    });
+
+    const topTrait = traits.reduce<(typeof traits)[number] | null>(
+      (best, t) => (t.count > 0 && (!best || t.count > best.count) ? t : best),
+      null,
+    );
+
+    const travelType = topTrait
+      ? {
+          zone: topTrait.zone,
+          percent: topTrait.percent,
+          ...ZONE_TRAVEL_TYPE[topTrait.zone],
+        }
+      : null;
+
+    return { totalRecords: total, traits, travelType };
+  }
+
   /** mood 를 남긴 최근 기록 상위 N개를 랭킹 형태로 — "동행자 감정 후기" 카드용 */
   async getHighlights(userId: string, limit = 3) {
     const records = await this.prisma.travelRecord.findMany({
@@ -111,7 +162,7 @@ export class RecordService {
     });
     return records.map((r, idx) => ({
       rank: idx + 1,
-      mood: r.mood as string,
+      mood: r.mood as Mood,
       quote: r.note,
     }));
   }

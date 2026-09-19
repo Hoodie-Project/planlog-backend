@@ -145,6 +145,40 @@ export const ZONE_META: Record<Zone, ZoneMeta> = {
   },
 };
 
+interface ZoneTravelType {
+  /** 여행 유형 타이틀 */
+  title: string;
+  /** 여행 유형 한 줄 설명 */
+  description: string;
+}
+
+/**
+ * 감성존별 대표 "여행 유형" — 완료한 코스 리뷰(TravelRecord)의 감성존 비중 중
+ * 가장 높은 존을 기준으로 부여하는 타이틀/설명. "나의 기록" 페이지 여행 성향 뱃지용.
+ */
+export const ZONE_TRAVEL_TYPE: Record<Zone, ZoneTravelType> = {
+  [Zone.SEA]: {
+    title: '조용한 바다 산책형',
+    description: '여유롭게 바다를 거닐며 충전하는 여행자',
+  },
+  [Zone.SNOW]: {
+    title: '설원 트레킹형',
+    description: '차가운 공기 속에서 활력을 되찾는 여행자',
+  },
+  [Zone.VALLEY]: {
+    title: '계곡 힐링형',
+    description: '물소리와 초록빛 사이에서 마음을 씻어내는 여행자',
+  },
+  [Zone.RETRO]: {
+    title: '골목길 탐방형',
+    description: '옛 정취 가득한 거리를 느긋하게 즐기는 여행자',
+  },
+  [Zone.PHOTO]: {
+    title: '절경 헌터형',
+    description: '숨은 절경을 찾아 카메라에 담는 여행자',
+  },
+};
+
 /**
  * 한국관광 데이터랩(빅데이터·연관관광지) 행정 시군구 코드 — 강원=51xxx.
  * ⚠️ KorService2 의 시군구 코드(강릉=1 등)와 체계가 다르다(이건 행정표준코드).

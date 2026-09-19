@@ -154,6 +154,8 @@ model TravelRecord {
   travelDate DateTime
   /// 방문 지역(예: "강릉")
   location   String
+  /// 감성존 (SEA/SNOW/VALLEY/RETRO/PHOTO) — 리뷰 작성 시점의 코스 감성존
+  zone       String
   /// 한 줄 소감
   note       String
   /// 오늘의 감정(자유 입력, 예: "평온함") — 선택
