@@ -2,8 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStampDto } from './dto/create-stamp.dto';
 import { Zone, ZONE_META } from '../common/gangwon.constants';
+import { Mood } from '../common/mood.constants';
 
 const ALL_ZONES = Object.values(Zone);
+
+export type StampSortOrder = 'asc' | 'desc';
 
 @Injectable()
 export class StampService {
@@ -24,11 +27,27 @@ export class StampService {
     });
   }
 
-  findAll(userId: string) {
-    return this.prisma.stamp.findMany({
-      where: { userId },
-      orderBy: { visitedAt: 'desc' },
+  /**
+   * 내 스탬프 목록. zone 을 주면 필터링, order 로 최신/오래된 순 지정.
+   * "완료한 스탬프" 카드에 표시할, 그 스탬프가 속한 리뷰(TravelRecord)의 감정(mood)을 함께 반환.
+   */
+  async findAll(userId: string, zone?: Zone, order: StampSortOrder = 'desc') {
+    const stamps = await this.prisma.stamp.findMany({
+      where: { userId, ...(zone ? { zone } : {}) },
+      orderBy: { visitedAt: order },
+      include: {
+        travelRecords: {
+          select: { mood: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
+      },
     });
+
+    return stamps.map(({ travelRecords, ...stamp }) => ({
+      ...stamp,
+      mood: (travelRecords[0]?.mood as Mood | undefined) ?? null,
+    }));
   }
 
   /** 5개 감성존 완주 진행률 + 리워드 */

@@ -1,15 +1,18 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
   ApiProperty,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
-import { StampService } from './stamp.service';
+import { StampService, StampSortOrder } from './stamp.service';
 import { CreateStampDto } from './dto/create-stamp.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
+import { Zone } from '../common/gangwon.constants';
+import { Mood } from '../common/mood.constants';
 import type { User } from '../../generated/prisma/client.js';
 
 export class StampEntityDto {
@@ -20,6 +23,12 @@ export class StampEntityDto {
   @ApiProperty() title: string;
   @ApiProperty({ nullable: true }) image: string | null;
   @ApiProperty() visitedAt: Date;
+  @ApiProperty({
+    enum: Mood,
+    nullable: true,
+    description: '이 스탬프가 속한 리뷰의 감정(리뷰 없으면 null)',
+  })
+  mood: Mood | null;
 }
 
 class ZoneProgressDto {
@@ -81,11 +90,19 @@ export class StampController {
   @Get()
   @ApiOperation({
     summary: '내 스탬프 목록',
-    description: '최신 방문순. (JWT 필요)',
+    description:
+      'zone 으로 감성존 필터, order 로 정렬(최신순 desc/오래된순 asc, 기본 desc). "완료한 스탬프" 페이지용. (JWT 필요)',
   })
+  @ApiQuery({ name: 'zone', required: false, enum: Zone })
+  @ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'] })
   @ApiOkResponse({ type: [StampEntityDto] })
-  findAll(@CurrentUser() user: User) {
-    return this.stampService.findAll(user.id);
+  findAll(
+    @CurrentUser() user: User,
+    @Query('zone') zone?: Zone,
+    @Query('order') orderRaw?: string,
+  ) {
+    const order: StampSortOrder = orderRaw === 'asc' ? 'asc' : 'desc';
+    return this.stampService.findAll(user.id, zone, order);
   }
 
   @Get('progress')
