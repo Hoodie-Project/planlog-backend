@@ -25,6 +25,7 @@ export class SpotController {
       '- `zone`: 감성존(SEA 동해바다 / SNOW 설원산악 / VALLEY 계곡자연 / RETRO 레트로문화 / PHOTO 절경포토). 생략 시 강원 전체',
       '- `contentTypeId`: 12 관광지 / 14 문화시설 / 28 레포츠 등 (기본 12)',
       '- `numOfRows`(1~50, 기본 12), `pageNo`(기본 1)',
+      '- `excludeContentIds`(선택, 쉼표구분): 코스에 이미 들어있는 장소를 교체 후보에서 제외',
       '',
       '**출력**: PlaceDto 배열 (contentId, 명칭, 주소, 좌표, 대표이미지, 추정 감성존)',
       '',
@@ -40,12 +41,13 @@ export class SpotController {
   @ApiOperation({
     summary: '위치기반 관광지 조회 (뚜벅이 동선)',
     description: [
-      '좌표 반경 내 관광지(KorService2 locationBasedList2). KTX 역 좌표 + 반경으로 도보권 스팟을 찾습니다.',
+      '좌표 반경 내 관광지(KorService2 locationBasedList2). KTX 역 좌표 + 반경으로 도보권 스팟을 찾거나, 코스의 특정 장소/점심을 근처 후보로 "교체"할 때 씁니다.',
       '',
       '**입력**',
       '- `mapX`(경도, 필수), `mapY`(위도, 필수)',
       '- `radius`: 반경(m, 100~20000, 기본 2000)',
-      '- `contentTypeId`(선택), `numOfRows`(기본 12)',
+      '- `contentTypeId`(선택 — 39=음식점으로 주면 점심 교체용), `numOfRows`(기본 12)',
+      '- `excludeContentIds`(선택, 쉼표구분): 이미 코스에 들어있는 장소 제외(교체하려는 장소 자신도 포함해서 보내면 됨)',
       '',
       '**출력**: PlaceDto 배열 (기준 좌표로부터의 거리 `dist`(m) 포함)',
     ].join('\n'),

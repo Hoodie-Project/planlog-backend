@@ -2,12 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { TourApiService } from '../tour-api/tour-api.service';
 import { TourRawItem } from '../tour-api/tour-api.types';
 import {
+  ContentType,
   GANGWON_AREA_CODE,
   ZONE_META,
   inferZone,
 } from '../common/gangwon.constants';
 import { toPlaceDto } from '../common/dto/place.dto';
-import { AccommodationQueryDto, StayType } from './dto/accommodation-query.dto';
+import {
+  AccommodationQueryDto,
+  LocationAccommodationQueryDto,
+  StayType,
+} from './dto/accommodation-query.dto';
 import { StayDto } from './dto/stay.dto';
 
 const KOR_SERVICE = 'KorService2';
@@ -41,7 +46,51 @@ export class AccommodationService {
     if (query.type) {
       stays = stays.filter((s) => s.stayType === query.type);
     }
-    return stays;
+    return this.excludeIds(stays, query.excludeContentIds);
+  }
+
+  /**
+   * 좌표 근처 숙소(코스의 특정 지점 근처로 숙소를 "교체"할 때 사용).
+   * TourAPI locationBasedList2 를 숙박(contentTypeId=32)로 조회 — 거리순(dist 포함).
+   */
+  async findStaysByLocation(
+    query: LocationAccommodationQueryDto,
+  ): Promise<StayDto[]> {
+    const { items } = await this.tourApi.getList<StayRawItem>(
+      KOR_SERVICE,
+      'locationBasedList2',
+      {
+        mapX: query.mapX,
+        mapY: query.mapY,
+        radius: query.radius,
+        contentTypeId: ContentType.STAY,
+        numOfRows: query.numOfRows,
+        arrange: 'E', // 거리순(이미지 있는 항목 우선)
+      },
+    );
+
+    let stays: StayDto[] = items.map((raw) => ({
+      ...toPlaceDto(raw),
+      zone: inferZone(raw.title, raw.sigungucode),
+      stayType: this.classify(raw),
+    }));
+
+    if (query.type) {
+      stays = stays.filter((s) => s.stayType === query.type);
+    }
+    return this.excludeIds(stays, query.excludeContentIds);
+  }
+
+  /** excludeContentIds(쉼표 구분 문자열)에 해당하는 항목 제외 */
+  private excludeIds(stays: StayDto[], excludeContentIds?: string): StayDto[] {
+    if (!excludeContentIds) return stays;
+    const excluded = new Set(
+      excludeContentIds
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    );
+    return stays.filter((s) => !excluded.has(s.contentId));
   }
 
   /**

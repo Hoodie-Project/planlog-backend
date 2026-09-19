@@ -17,7 +17,7 @@ export class SpotService {
 
   /** 감성존(또는 강원 전체) 지역기반 관광지 조회 */
   async findByZone(query: ZoneSpotQueryDto): Promise<PlaceDto[]> {
-    const { zone, contentTypeId, numOfRows, pageNo } = query;
+    const { zone, contentTypeId, numOfRows, pageNo, excludeContentIds } = query;
 
     // 감성존이 지정되면 해당 시군구들을 병렬 조회 후 병합, 아니면 강원 전체 1회 조회.
     if (zone) {
@@ -27,17 +27,18 @@ export class SpotService {
           this.areaBasedList(contentTypeId, numOfRows, pageNo, code),
         ),
       );
-      return this.dedupe(results.flat()).map((it) => ({
+      const places = this.dedupe(results.flat()).map((it) => ({
         ...toPlaceDto(it),
         zone, // 존 조회 결과는 해당 존으로 확정 태깅
       }));
+      return this.excludeIds(places, excludeContentIds);
     }
 
     const items = await this.areaBasedList(contentTypeId, numOfRows, pageNo);
-    return items.map(toPlaceDto);
+    return this.excludeIds(items.map(toPlaceDto), excludeContentIds);
   }
 
-  /** 위치기반 관광지 조회 (뚜벅이 동선 — 좌표 반경 내 스팟) */
+  /** 위치기반 관광지 조회 (뚜벅이 동선 — 좌표 반경 내 스팟, 코스 장소 교체용) */
   async findByLocation(query: LocationSpotQueryDto): Promise<PlaceDto[]> {
     const { items } = await this.tourApi.getList<TourRawItem>(
       KOR_SERVICE,
@@ -51,7 +52,7 @@ export class SpotService {
         arrange: 'E', // 거리순(이미지 있는 항목 우선)
       },
     );
-    return items.map(toPlaceDto);
+    return this.excludeIds(items.map(toPlaceDto), query.excludeContentIds);
   }
 
   /** 관광지 상세 (공통정보) */
@@ -125,5 +126,20 @@ export class SpotService {
       seen.add(it.contentid);
       return true;
     });
+  }
+
+  /** excludeContentIds(쉼표 구분 문자열)에 해당하는 항목 제외 */
+  private excludeIds(
+    places: PlaceDto[],
+    excludeContentIds?: string,
+  ): PlaceDto[] {
+    if (!excludeContentIds) return places;
+    const excluded = new Set(
+      excludeContentIds
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean),
+    );
+    return places.filter((p) => !excluded.has(p.contentId));
   }
 }

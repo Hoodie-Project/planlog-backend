@@ -5,6 +5,7 @@ import {
   IsInt,
   IsNumberString,
   IsOptional,
+  IsString,
   Max,
   Min,
 } from 'class-validator';
@@ -47,6 +48,15 @@ export class ZoneSpotQueryDto {
   @IsInt()
   @Min(1)
   pageNo?: number = 1;
+
+  @ApiPropertyOptional({
+    description:
+      '결과에서 제외할 contentId 목록(쉼표 구분). 코스에 이미 들어있는 장소를 교체 후보에서 빼고 싶을 때 사용',
+    example: '1234567,7654321',
+  })
+  @IsOptional()
+  @IsString()
+  excludeContentIds?: string;
 }
 
 export class LocationSpotQueryDto {
@@ -86,4 +96,13 @@ export class LocationSpotQueryDto {
   @Min(1)
   @Max(50)
   numOfRows?: number = 12;
+
+  @ApiPropertyOptional({
+    description:
+      '결과에서 제외할 contentId 목록(쉼표 구분). 코스에 이미 들어있는 장소를 교체 후보에서 빼고 싶을 때 사용(지금 교체하려는 장소 자신도 포함해서 보내면 됨)',
+    example: '1234567,7654321',
+  })
+  @IsOptional()
+  @IsString()
+  excludeContentIds?: string;
 }
