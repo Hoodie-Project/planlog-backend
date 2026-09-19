@@ -21,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { SavedCourseService, SavedCourseStatus } from './saved-course.service';
 import { CreateSavedCourseDto } from './dto/create-saved-course.dto';
+import { ReplaceCourseItemDto } from './dto/replace-course-item.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import type { User } from '../../generated/prisma/client.js';
@@ -139,6 +140,32 @@ export class SavedCourseController {
   @ApiOkResponse({ type: SavedCourseEntityDto })
   findOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.savedCourseService.findOne(user.id, id);
+  }
+
+  @Patch(':id/items')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '저장 코스 항목 교체 (장소/점심/숙소 변경)',
+    description: [
+      'GET /spots/location, /accommodations/location 등에서 고른 후보로 코스의 특정 항목 하나를 교체합니다.',
+      '교체 후 그 날 동선의 이동거리·이동시간·도착시각이 자동 재계산됩니다(같은 날 이후 항목들도 연쇄 갱신, 코스 전체 합계도 갱신).',
+      '',
+      '**입력**',
+      '- `day`(필수): 교체할 항목이 속한 일자(1부터)',
+      '- `order`(필수): 교체할 항목의 기존 순서(그 날 동선 내 order, 1부터)',
+      '- `contentId`/`title`/`mapX`/`mapY`(필수) — 후보 조회 API 응답 값 그대로',
+      '- `address`/`image`/`zone`(선택)',
+      '',
+      '⚠️ 그 날 1번째 항목을 교체하면(출발 앵커 좌표가 저장돼 있지 않아) 그 항목이 새 출발점으로 재정의됩니다(이동거리 0, 시작 시각은 유지).',
+    ].join('\n'),
+  })
+  @ApiOkResponse({ type: SavedCourseEntityDto })
+  replaceItem(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: ReplaceCourseItemDto,
+  ) {
+    return this.savedCourseService.replaceItem(user.id, id, dto);
   }
 
   @Patch(':id/complete')

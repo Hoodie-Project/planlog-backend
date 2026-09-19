@@ -1,8 +1,23 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Prisma } from '../../generated/prisma/client.js';
 import { CreateSavedCourseDto } from './dto/create-saved-course.dto';
-import { CourseDto, CourseItemType } from '../course/dto/course.dto';
+import { ReplaceCourseItemDto } from './dto/replace-course-item.dto';
+import {
+  CourseDayDto,
+  CourseDto,
+  CourseItemType,
+} from '../course/dto/course.dto';
+import { Style, inferZone } from '../common/gangwon.constants';
+import { haversineMeters, toLatLng, travelMinutes } from '../common/geo';
+
+const SPOT_STAY_MIN = 90;
+const FAMILY_SPOT_STAY_MIN = 120;
+const MEAL_STAY_MIN = 60;
 
 export interface StampProgress {
   /** 이 코스 스팟 중 이미 스탬프 찍은 개수 */
@@ -144,6 +159,157 @@ export class SavedCourseService {
         completedByReview,
       ),
     };
+  }
+
+  /**
+   * 코스의 특정 항목(장소/점심/숙소)을 다른 후보로 교체.
+   * GET /spots/location, /accommodations/location 등에서 고른 후보를 그대로 넘기면 됨.
+   * 교체 이후 그 날 동선의 이동거리·이동시간·도착시각을 연쇄 재계산한다.
+   * ⚠️ 그 날의 "출발 앵커" 좌표는 저장돼 있지 않아, 1번째 항목을 교체하면
+   *    그 항목을 새 출발점으로 재정의한다(이동거리 0으로 리셋, 시작 시각은 유지).
+   */
+  async replaceItem(userId: string, id: string, dto: ReplaceCourseItemDto) {
+    const saved = await this.prisma.savedCourse.findFirst({
+      where: { id, userId },
+    });
+    if (!saved) throw new NotFoundException('저장된 코스를 찾을 수 없습니다.');
+
+    const newPos = toLatLng(dto.mapX, dto.mapY);
+    if (!newPos) {
+      throw new BadRequestException('mapX/mapY 가 올바르지 않습니다.');
+    }
+
+    const course = saved.payload as unknown as CourseDto;
+    const day = course.days.find((d) => d.day === dto.day);
+    if (!day) throw new NotFoundException('해당 일자를 찾을 수 없습니다.');
+    const idx = day.items.findIndex((i) => i.order === dto.order);
+    if (idx === -1) {
+      throw new NotFoundException('해당 순서의 항목을 찾을 수 없습니다.');
+    }
+
+    const target = day.items[idx];
+    const stayMinutes = this.defaultStayMinutes(target.type, course.style);
+
+    if (idx === 0) {
+      // 앵커 좌표가 없어 첫 항목은 새 출발점으로 재정의(이동거리 0, 시작 시각은 유지)
+      const dayStartClock =
+        this.parseClock(target.arriveTime) - target.travelMinutesFromPrev;
+      day.items[idx] = {
+        ...target,
+        contentId: dto.contentId,
+        title: dto.title,
+        mapX: dto.mapX,
+        mapY: dto.mapY,
+        address: dto.address,
+        image: dto.image,
+        zone: dto.zone ?? inferZone(dto.title),
+        distanceFromPrev: 0,
+        travelMinutesFromPrev: 0,
+        arriveTime: this.formatClock(dayStartClock),
+        stayMinutes,
+      };
+    } else {
+      const prev = day.items[idx - 1];
+      const prevPos = toLatLng(prev.mapX, prev.mapY) ?? newPos;
+      const dist = haversineMeters(prevPos, newPos);
+      const travel = travelMinutes(dist, course.transport);
+      const prevClock = this.parseClock(prev.arriveTime) + prev.stayMinutes;
+      day.items[idx] = {
+        ...target,
+        contentId: dto.contentId,
+        title: dto.title,
+        mapX: dto.mapX,
+        mapY: dto.mapY,
+        address: dto.address,
+        image: dto.image,
+        zone: dto.zone ?? inferZone(dto.title),
+        distanceFromPrev: Math.round(dist),
+        travelMinutesFromPrev: travel,
+        arriveTime: this.formatClock(prevClock + travel),
+        stayMinutes,
+      };
+    }
+
+    // 교체된 항목 이후 같은 날의 나머지 항목들을 새 위치 기준으로 연쇄 재계산
+    let cursor = newPos;
+    let clock =
+      this.parseClock(day.items[idx].arriveTime) + day.items[idx].stayMinutes;
+    for (let i = idx + 1; i < day.items.length; i++) {
+      const it = day.items[i];
+      const pos = toLatLng(it.mapX, it.mapY) ?? cursor;
+      const dist = haversineMeters(cursor, pos);
+      const travel = travelMinutes(dist, course.transport);
+      it.distanceFromPrev = Math.round(dist);
+      it.travelMinutesFromPrev = travel;
+      it.arriveTime = this.formatClock(clock + travel);
+      clock = clock + travel + it.stayMinutes;
+      cursor = pos;
+    }
+
+    this.recomputeDayTotals(day);
+    course.totalDistance = course.days.reduce((s, d) => s + d.distance, 0);
+    course.totalTravelMinutes = course.days.reduce(
+      (s, d) => s + d.travelMinutes,
+      0,
+    );
+
+    const updated = await this.prisma.savedCourse.update({
+      where: { id },
+      data: {
+        payload: JSON.parse(JSON.stringify(course)) as Prisma.InputJsonValue,
+      },
+    });
+
+    const [completedIds, stampedContentIds] = await Promise.all([
+      this.getCompletedIds(userId),
+      this.getStampedContentIds(userId),
+    ]);
+    return {
+      ...updated,
+      status: this.resolveStatus(
+        updated.travelDate,
+        updated.completedAt,
+        completedIds.has(updated.id),
+      ),
+      stampProgress: this.computeStampProgress(
+        updated.payload,
+        stampedContentIds,
+      ),
+    };
+  }
+
+  private defaultStayMinutes(type: CourseItemType, style: Style): number {
+    if (type === CourseItemType.MEAL) return MEAL_STAY_MIN;
+    if (type === CourseItemType.STAY) return 0;
+    return style === Style.FAMILY ? FAMILY_SPOT_STAY_MIN : SPOT_STAY_MIN;
+  }
+
+  private recomputeDayTotals(day: CourseDayDto): void {
+    day.distance = Math.round(
+      day.items.reduce((s, i) => s + i.distanceFromPrev, 0),
+    );
+    day.travelMinutes = day.items.reduce(
+      (s, i) => s + i.travelMinutesFromPrev,
+      0,
+    );
+    const spotCount = day.items.filter(
+      (i) => i.type === CourseItemType.SPOT,
+    ).length;
+    day.summary = `${day.day}일차 · ${spotCount}곳`;
+  }
+
+  /** "HH:mm" → 자정 기준 분 */
+  private parseClock(hhmm: string): number {
+    const [h, m] = hhmm.split(':').map(Number);
+    return h * 60 + m;
+  }
+
+  /** 자정 기준 분 → "HH:mm" (24시간 랩어라운드) */
+  private formatClock(minutes: number): string {
+    const wrapped = ((minutes % 1440) + 1440) % 1440;
+    const h = Math.floor(wrapped / 60);
+    const m = wrapped % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   }
 
   /** 존재+소유권만 가볍게 확인(전체 status/stampProgress 계산 없이) */
