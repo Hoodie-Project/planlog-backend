@@ -23,9 +23,10 @@
 | 연관 관광지 | `GET /related-spots` | "함께 가는" 스팟 (코스 동선 연결에도 활용) |
 | 반려동물 동반 | `GET /pet-spots`, `/pet-spots/{id}/info` | 동반 가능 장소 목록·동반 조건 |
 | 인증 | `POST /auth/kakao`, `/auth/guest`, `GET /auth/me` | 카카오 로그인 / 게스트(심사용) / 내 정보 |
-| 코스 저장 🔒 | `POST/GET/DELETE /saved-courses` | 생성 코스 저장·조회·삭제 |
+| 코스 저장 🔒 | `POST/GET/DELETE /saved-courses`, `/saved-courses/upcoming` | 저장·조회·삭제, 상태(대기중/진행중/완료)·다가오는 여행·스탬프 진행률 |
 | 찜 🔒 | `POST/GET/DELETE /bookmarks`, `GET /bookmarks/upcoming` | 축제·관광지·코스 찜 + D-Day 임박 목록 |
-| 감성 스탬프 🔒 | `POST/GET /stamps`, `GET /stamps/progress` | 방문 인증 + 5존 완주 리워드 |
+| 감성 스탬프 🔒 | `POST/GET /stamps`, `GET /stamps/progress` | 방문 인증(존 필터·정렬) + 5존 완주 리워드 |
+| 여행 시작 역/터미널 | `GET /stations` | 코스만들기 "여행 시작 장소" 선택용 강원 기차역·버스터미널 좌표 목록 |
 | 동선 매칭 🔒 | `POST /matches/opt-in`, `GET /matches` … | 동일 존·날짜 여행 메이트 (상호 옵트인) |
 
 🔒 = JWT 인증 필요. 전체 요청/응답 규격은 **Swagger** `http://localhost:9000/api/docs`
@@ -73,22 +74,25 @@
 ## 코스 생성 로직 (핵심)
 
 ```
-입력: { zone, transport, style, spotCount, nights, travelDate?, seed?, startMapX/Y?, debug? }
+입력: { zone, transport, style, spotCount, nights, travelDate?, startTime?, seed?, startMapX/Y?, debug? }
   ① 재료 수집   감성존 시군구의 관광지·음식점·숙소 TourAPI 병렬 조회 → 좌표/점수화
                 (style=PET이면 반려동물 동반 가능 관광지 우선)
   ② 연관 로드   연관관광지 맵 구성 → 인기(잘 연결된) 스팟 점수 가산
+                (style=CALM이면 반대로 감점 — 한적한 장소 우선)
   ③ 동선 구성   밀집 클러스터에서 출발 → 직전 스팟의 "연관관광지" 우선 연결(없으면 거리 폴백)
-                → 점심·숙소 삽입, 가중 랜덤으로 매번 변주
-  ④ 시간표      10:00 시작, (거리÷속도) 이동 + 체류(관광지90·점심60분) 누적
+                → 점심·숙소 삽입, 가중 랜덤으로 매번 변주 (style=FAMILY면 한 구간 이동거리 축소)
+  ④ 시간표      startTime(기본 10:00) 시작, (거리÷속도) 이동 + 체류 누적
+                (체류: 관광지 90분·style=FAMILY면 120분 / 점심 60분)
   ⑤ 부가정보    travelDate→혼잡도, debug→연관 매칭 적중률
 출력: days[](일자별 시간순 동선) + congestion? + relatedDebug?
 ```
 
 | 규칙 | 값 |
 |---|---|
-| 한 구간 최대 이동 | 뚜벅이 2.5km / KTX 6km / 렌터카 30km |
+| 한 구간 최대 이동 | 뚜벅이 2.5km / KTX 6km / 렌터카 30km (FAMILY는 60%로 축소) |
 | 이동 속도 | 도보 4 / KTX 30 / 렌터카 40 (km/h) |
-| 체류 | 관광지 90분 · 점심 60분 |
+| 체류 | 관광지 90분(FAMILY는 120분) · 점심 60분 |
+| 여행 스타일 | SOLO(혼자) · FAMILY(가족과 함께) · PET(반려동물과 함께) · CALM(조용히 쉬고 싶어요) |
 
 ---
 
