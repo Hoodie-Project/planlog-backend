@@ -112,6 +112,21 @@ src/
 docs/ROADMAP.md
 ```
 
+### DB 테이블 현황 (`prisma/schema.prisma`)
+
+> 관광 원본 데이터는 DB에 적재하지 않음(TourAPI 실시간 호출) — 아래는 서비스 자체 데이터만.
+
+| 테이블 | 설명 | 주요 필드 |
+|---|---|---|
+| `User` | 유저 (카카오 로그인 / 게스트) | provider, nickname, email, isGuest |
+| `SavedCourse` | 저장한 코스 (생성 결과 JSON 스냅샷) | zone, nights, payload(Json) |
+| `Bookmark` | 찜 (축제·관광지·코스) | targetType, targetId, dDayDate |
+| `Stamp` | 감성 스탬프 (방문 인증) | zone, contentId, visitedAt |
+| `MatchOptIn` | 동선 매칭 옵트인 | zone, travelDate |
+| `NotificationSettings` | 알림 설정 (유저당 1개) | ddayAlert, festivalAlert, courseReminder |
+| `CourseFeedback` | 코스 결과 피드백 | zone, options(Json) |
+| `TravelRecord` | 여행 기록 카드 (저널) | title, travelDate, location, mood, tags(Json) |
+
 ---
 
 ## 시작하기
