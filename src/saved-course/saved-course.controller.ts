@@ -3,7 +3,10 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
+  Patch,
   Post,
   Query,
   UseGuards,
@@ -41,8 +44,14 @@ export class SavedCourseEntityDto {
   @ApiProperty({ nullable: true, description: '여행 날짜(선택)' })
   travelDate: Date | null;
   @ApiProperty({
+    nullable: true,
+    description: '유저가 직접 완료 처리한 시각(선택, 리뷰 없이도 완료 가능)',
+  })
+  completedAt: Date | null;
+  @ApiProperty({
     enum: SavedCourseStatus,
-    description: '대기중(날짜 미정)/진행중(날짜만 정함)/완료(리뷰 작성함)',
+    description:
+      '대기중(날짜 미정)/진행중(날짜만 정함)/완료(직접 완료 처리했거나 리뷰 작성함)',
   })
   status: SavedCourseStatus;
   @ApiProperty({
@@ -130,6 +139,30 @@ export class SavedCourseController {
   @ApiOkResponse({ type: SavedCourseEntityDto })
   findOne(@CurrentUser() user: User, @Param('id') id: string) {
     return this.savedCourseService.findOne(user.id, id);
+  }
+
+  @Patch(':id/complete')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '저장 코스 완료 처리',
+    description:
+      '리뷰나 스탬프가 하나도 없어도 바로 완료(COMPLETED) 처리합니다. 여러 번 호출해도 안전(완료 시각만 갱신). (JWT 필요)',
+  })
+  @ApiOkResponse({ type: SavedCourseEntityDto })
+  complete(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.savedCourseService.complete(user.id, id);
+  }
+
+  @Patch(':id/uncomplete')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: '저장 코스 완료 취소',
+    description:
+      '직접 완료 처리한 것만 취소합니다. 이 코스로 작성된 리뷰가 있으면 그 사유로는 여전히 완료 상태로 보일 수 있어요. (JWT 필요)',
+  })
+  @ApiOkResponse({ type: SavedCourseEntityDto })
+  uncomplete(@CurrentUser() user: User, @Param('id') id: string) {
+    return this.savedCourseService.uncomplete(user.id, id);
   }
 
   @Delete(':id')

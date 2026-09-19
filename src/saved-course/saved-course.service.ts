@@ -11,11 +11,11 @@ export interface StampProgress {
   total: number;
 }
 
-/** 저장한 코스 상태 — DB엔 저장하지 않고 travelDate/리뷰 존재 여부로 매번 계산 */
+/** 저장한 코스 상태 — DB엔 저장하지 않고 travelDate/완료 여부로 매번 계산 */
 export enum SavedCourseStatus {
   PENDING = 'PENDING', // 대기중 — 여행 날짜 미정
-  IN_PROGRESS = 'IN_PROGRESS', // 진행중 — 날짜는 정했지만 이 코스로 쓴 리뷰가 아직 없음
-  COMPLETED = 'COMPLETED', // 완료 — 이 코스로 여행 기록(리뷰)을 작성함
+  IN_PROGRESS = 'IN_PROGRESS', // 진행중 — 날짜는 정했지만 아직 완료 안 함
+  COMPLETED = 'COMPLETED', // 완료 — 유저가 직접 완료 처리했거나, 이 코스로 리뷰를 작성함
 }
 
 @Injectable()
@@ -51,7 +51,11 @@ export class SavedCourseService {
 
     const withStatus = courses.map((c) => ({
       ...c,
-      status: this.resolveStatus(c.travelDate, completedIds.has(c.id)),
+      status: this.resolveStatus(
+        c.travelDate,
+        c.completedAt,
+        completedIds.has(c.id),
+      ),
       stampProgress: this.computeStampProgress(c.payload, stampedContentIds),
     }));
 
@@ -73,7 +77,7 @@ export class SavedCourseService {
     });
 
     return courses
-      .filter((c) => !completedIds.has(c.id))
+      .filter((c) => !c.completedAt && !completedIds.has(c.id))
       .slice(0, limit)
       .map((c) => ({
         ...c,
@@ -98,6 +102,7 @@ export class SavedCourseService {
       ...course,
       status: this.resolveStatus(
         course.travelDate,
+        course.completedAt,
         completedIds.has(course.id),
       ),
       stampProgress: this.computeStampProgress(
@@ -113,6 +118,43 @@ export class SavedCourseService {
     return { deleted: true, id };
   }
 
+  /** 리뷰·스탬프 여부와 무관하게 바로 완료 처리 */
+  async complete(userId: string, id: string) {
+    await this.assertOwned(userId, id);
+    const course = await this.prisma.savedCourse.update({
+      where: { id },
+      data: { completedAt: new Date() },
+    });
+    return { ...course, status: SavedCourseStatus.COMPLETED };
+  }
+
+  /** 완료 취소(리뷰가 걸려있으면 여전히 완료로 보일 수 있음) */
+  async uncomplete(userId: string, id: string) {
+    await this.assertOwned(userId, id);
+    const course = await this.prisma.savedCourse.update({
+      where: { id },
+      data: { completedAt: null },
+    });
+    const completedByReview = (await this.getCompletedIds(userId)).has(id);
+    return {
+      ...course,
+      status: this.resolveStatus(
+        course.travelDate,
+        course.completedAt,
+        completedByReview,
+      ),
+    };
+  }
+
+  /** 존재+소유권만 가볍게 확인(전체 status/stampProgress 계산 없이) */
+  private async assertOwned(userId: string, id: string): Promise<void> {
+    const course = await this.prisma.savedCourse.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    });
+    if (!course) throw new NotFoundException('저장된 코스를 찾을 수 없습니다.');
+  }
+
   /** 리뷰(TravelRecord)가 걸려있는 저장 코스 id 집합 — 완료 판정 기준 */
   private async getCompletedIds(userId: string): Promise<Set<string>> {
     const records = await this.prisma.travelRecord.findMany({
@@ -124,9 +166,10 @@ export class SavedCourseService {
 
   private resolveStatus(
     travelDate: Date | null,
-    completed: boolean,
+    completedAt: Date | null,
+    completedByReview: boolean,
   ): SavedCourseStatus {
-    if (completed) return SavedCourseStatus.COMPLETED;
+    if (completedAt || completedByReview) return SavedCourseStatus.COMPLETED;
     return travelDate
       ? SavedCourseStatus.IN_PROGRESS
       : SavedCourseStatus.PENDING;
