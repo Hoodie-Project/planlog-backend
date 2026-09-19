@@ -19,6 +19,7 @@ import { PetModule } from './pet/pet.module';
 import { NotificationSettingsModule } from './notification-settings/notification-settings.module';
 import { CourseFeedbackModule } from './course-feedback/course-feedback.module';
 import { RecordModule } from './record/record.module';
+import { StationModule } from './station/station.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { RecordModule } from './record/record.module';
     NotificationSettingsModule,
     CourseFeedbackModule,
     RecordModule,
+    StationModule,
   ],
   controllers: [AppController],
 })
