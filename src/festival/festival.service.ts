@@ -61,10 +61,18 @@ export class FestivalService {
 
     if (weekendOnly) {
       const weekendFestivals = festivals.filter((f) => f.isThisWeekend);
-      // 이번 주말과 겹치는 축제가 하나도 없으면(등록 데이터 희소) 최신 축제로 대체 노출
-      return weekendFestivals.length > 0
-        ? weekendFestivals
-        : this.sortByRecency(festivals);
+      if (weekendFestivals.length > 0) return weekendFestivals;
+
+      // 이번 주말 겹치는 축제가 없으면(등록 데이터 희소) 이번 달~+2개월(연도 무관, 월만 비교)
+      // 시즌에 해당하는 축제로 대체 노출
+      const seasonFestivals = festivals.filter((f) =>
+        this.inSeasonWindow(f.eventStartDate, f.eventEndDate),
+      );
+      if (seasonFestivals.length > 0)
+        return this.sortByRecency(seasonFestivals);
+
+      // 그마저도 없으면 강원 축제 전체를 최신순으로 노출(빈 화면 방지 최종 안전망)
+      return this.sortByRecency(festivals);
     }
 
     // 주말 개최 축제를 상단으로, 그 안에서는 최신순으로 정렬
@@ -84,6 +92,31 @@ export class FestivalService {
     const db = this.parseYmd(b.eventStartDate ?? '');
     if (!da || !db) return 0;
     return db.getTime() - da.getTime(); // 시작일이 늦은(최신) 순
+  }
+
+  /** 이번 달부터 +2개월(연도 무관, 월만 비교)에 해당하는 시즌 축제인지 */
+  private inSeasonWindow(start?: string, end?: string): boolean {
+    if (!start) return false;
+    const s = this.parseYmd(start);
+    const e = end ? this.parseYmd(end) : s;
+    if (!s || !e) return false;
+
+    const targetMonths = this.seasonMonths();
+    const cursor = new Date(s.getFullYear(), s.getMonth(), 1);
+    const endCursor = new Date(e.getFullYear(), e.getMonth(), 1);
+    for (let i = 0; cursor <= endCursor && i < 24; i++) {
+      if (targetMonths.has(cursor.getMonth() + 1)) return true;
+      cursor.setMonth(cursor.getMonth() + 1);
+    }
+    return false;
+  }
+
+  /** 이번 달, 다음 달, 다다음 달 (1~12, 연도 무관) */
+  private seasonMonths(): Set<number> {
+    const thisMonth = new Date().getMonth() + 1;
+    return new Set(
+      [0, 1, 2].map((offset) => ((thisMonth - 1 + offset) % 12) + 1),
+    );
   }
 
   /** 이번 주(오늘 기준) 금요일~일요일 날짜 범위 */
