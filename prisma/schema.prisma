@@ -162,7 +162,7 @@ model TravelRecord {
   zone       String
   /// 한 줄 소감
   note       String
-  /// 오늘의 감정(자유 입력, 예: "평온함") — 선택
+  /// 오늘의 감정 — 고정 8종 중 1개(Mood enum, class-validator로 검증. DB 컬럼 자체는 String). 선택
   mood       String?
   image      String?
   /// 태그 문자열 배열(JSON), 예: ["바다", "혼자", "카페"]
