@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { Prisma } from '../../generated/prisma/client.js';
 import { CreateCourseFeedbackDto } from './dto/create-course-feedback.dto';
 
 @Injectable()
@@ -12,7 +11,7 @@ export class CourseFeedbackService {
       data: {
         userId,
         zone: dto.zone,
-        options: dto.options as Prisma.InputJsonValue,
+        options: dto.options,
       },
     });
   }
