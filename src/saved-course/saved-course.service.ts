@@ -13,7 +13,12 @@ import {
   CourseItemType,
 } from '../course/dto/course.dto';
 import { Style, inferZone } from '../common/gangwon.constants';
-import { haversineMeters, toLatLng, travelMinutes } from '../common/geo';
+import {
+  LatLng,
+  haversineMeters,
+  toLatLng,
+  travelMinutes,
+} from '../common/geo';
 
 const SPOT_STAY_MIN = 90;
 const FAMILY_SPOT_STAY_MIN = 120;
@@ -26,11 +31,15 @@ export interface StampProgress {
   total: number;
 }
 
-/** 저장한 코스 상태 — DB엔 저장하지 않고 travelDate/완료 여부로 매번 계산 */
+/**
+ * 저장한 코스 상태 — DB엔 계산 근거(startedAt/completedAt)만 저장하고 상태 자체는 매번 계산.
+ * travelDate 는 상태와 무관("다가오는 여행" D-Day 표시에만 사용) — "코스 시작하기"/"코스 종료하기"
+ * 버튼(명시적 액션)이 기준이다.
+ */
 export enum SavedCourseStatus {
-  PENDING = 'PENDING', // 대기중 — 여행 날짜 미정
-  IN_PROGRESS = 'IN_PROGRESS', // 진행중 — 날짜는 정했지만 아직 완료 안 함
-  COMPLETED = 'COMPLETED', // 완료 — 유저가 직접 완료 처리했거나, 이 코스로 리뷰를 작성함
+  PENDING = 'PENDING', // 대기중 — 아직 "코스 시작하기"를 안 누름
+  IN_PROGRESS = 'IN_PROGRESS', // 진행중 — "코스 시작하기"를 누름
+  COMPLETED = 'COMPLETED', // 완료 — "코스 종료하기" 후 리뷰를 작성했거나, 직접 완료 처리함
 }
 
 @Injectable()
@@ -67,7 +76,7 @@ export class SavedCourseService {
     const withStatus = courses.map((c) => ({
       ...c,
       status: this.resolveStatus(
-        c.travelDate,
+        c.startedAt,
         c.completedAt,
         completedIds.has(c.id),
       ),
@@ -116,7 +125,7 @@ export class SavedCourseService {
     return {
       ...course,
       status: this.resolveStatus(
-        course.travelDate,
+        course.startedAt,
         course.completedAt,
         completedIds.has(course.id),
       ),
@@ -133,7 +142,25 @@ export class SavedCourseService {
     return { deleted: true, id };
   }
 
-  /** 리뷰·스탬프 여부와 무관하게 바로 완료 처리 */
+  /** "코스 시작하기" — 대기중 → 진행중 */
+  async start(userId: string, id: string) {
+    await this.assertOwned(userId, id);
+    const course = await this.prisma.savedCourse.update({
+      where: { id },
+      data: { startedAt: new Date() },
+    });
+    const completedByReview = (await this.getCompletedIds(userId)).has(id);
+    return {
+      ...course,
+      status: this.resolveStatus(
+        course.startedAt,
+        course.completedAt,
+        completedByReview,
+      ),
+    };
+  }
+
+  /** 리뷰·스탬프 여부와 무관하게 바로 완료 처리("코스 종료하기" 후 리뷰 저장 없이도 강제 완료할 때) */
   async complete(userId: string, id: string) {
     await this.assertOwned(userId, id);
     const course = await this.prisma.savedCourse.update({
@@ -154,7 +181,7 @@ export class SavedCourseService {
     return {
       ...course,
       status: this.resolveStatus(
-        course.travelDate,
+        course.startedAt,
         course.completedAt,
         completedByReview,
       ),
@@ -162,9 +189,10 @@ export class SavedCourseService {
   }
 
   /**
-   * 코스의 특정 항목(장소/점심/숙소)을 다른 후보로 교체.
-   * GET /spots/location, /accommodations/location 등에서 고른 후보를 그대로 넘기면 됨.
-   * 교체 이후 그 날 동선의 이동거리·이동시간·도착시각을 연쇄 재계산한다.
+   * 코스의 특정 항목(장소/점심/숙소)을 다른 후보로 교체(order 지정), 또는 그 날에 없던
+   * 숙소를 새로 추가(order 생략 — "숙소 선택하기"). GET /spots/location,
+   * /accommodations/location 등에서 고른 후보를 그대로 넘기면 됨.
+   * 처리 이후 그 날 동선의 이동거리·이동시간·도착시각을 연쇄 재계산한다.
    * ⚠️ 그 날의 "출발 앵커" 좌표는 저장돼 있지 않아, 1번째 항목을 교체하면
    *    그 항목을 새 출발점으로 재정의한다(이동거리 0으로 리셋, 시작 시각은 유지).
    */
@@ -182,6 +210,89 @@ export class SavedCourseService {
     const course = saved.payload as unknown as CourseDto;
     const day = course.days.find((d) => d.day === dto.day);
     if (!day) throw new NotFoundException('해당 일자를 찾을 수 없습니다.');
+
+    if (dto.order === undefined) {
+      this.appendItem(day, course, dto, newPos);
+    } else {
+      this.replaceExistingItem(day, course, dto, newPos);
+    }
+
+    this.recomputeDayTotals(day);
+    course.totalDistance = course.days.reduce((s, d) => s + d.distance, 0);
+    course.totalTravelMinutes = course.days.reduce(
+      (s, d) => s + d.travelMinutes,
+      0,
+    );
+
+    const updated = await this.prisma.savedCourse.update({
+      where: { id },
+      data: {
+        payload: JSON.parse(JSON.stringify(course)) as Prisma.InputJsonValue,
+      },
+    });
+
+    const [completedIds, stampedContentIds] = await Promise.all([
+      this.getCompletedIds(userId),
+      this.getStampedContentIds(userId),
+    ]);
+    return {
+      ...updated,
+      status: this.resolveStatus(
+        updated.startedAt,
+        updated.completedAt,
+        completedIds.has(updated.id),
+      ),
+      stampProgress: this.computeStampProgress(
+        updated.payload,
+        stampedContentIds,
+      ),
+    };
+  }
+
+  /** order 생략 시 "숙소 선택하기" — 그 날 마지막에 새 숙소 항목을 추가 */
+  private appendItem(
+    day: CourseDayDto,
+    course: CourseDto,
+    dto: ReplaceCourseItemDto,
+    newPos: LatLng,
+  ): void {
+    const last = day.items[day.items.length - 1] as
+      | (typeof day.items)[number]
+      | undefined;
+    const prevPos = last ? (toLatLng(last.mapX, last.mapY) ?? newPos) : newPos;
+    const prevClock = last
+      ? this.parseClock(last.arriveTime) + last.stayMinutes
+      : this.parseClock('10:00');
+    const dist = last ? haversineMeters(prevPos, newPos) : 0;
+    const travel = last ? travelMinutes(dist, course.transport) : 0;
+    const newOrder = day.items.length
+      ? Math.max(...day.items.map((i) => i.order)) + 1
+      : 1;
+
+    day.items.push({
+      order: newOrder,
+      type: CourseItemType.STAY,
+      contentId: dto.contentId,
+      title: dto.title,
+      zone: dto.zone ?? inferZone(dto.title),
+      address: dto.address,
+      image: dto.image,
+      mapX: dto.mapX,
+      mapY: dto.mapY,
+      arriveTime: this.formatClock(prevClock + travel),
+      stayMinutes: 0,
+      travelMinutesFromPrev: travel,
+      distanceFromPrev: Math.round(dist),
+    });
+  }
+
+  /** order 지정 시 — 기존 항목을 다른 후보로 교체, 이후 항목들 연쇄 재계산 */
+  private replaceExistingItem(
+    day: CourseDayDto,
+    course: CourseDto,
+    dto: ReplaceCourseItemDto,
+    newPos: LatLng,
+  ): void {
     const idx = day.items.findIndex((i) => i.order === dto.order);
     if (idx === -1) {
       throw new NotFoundException('해당 순서의 항목을 찾을 수 없습니다.');
@@ -245,37 +356,6 @@ export class SavedCourseService {
       clock = clock + travel + it.stayMinutes;
       cursor = pos;
     }
-
-    this.recomputeDayTotals(day);
-    course.totalDistance = course.days.reduce((s, d) => s + d.distance, 0);
-    course.totalTravelMinutes = course.days.reduce(
-      (s, d) => s + d.travelMinutes,
-      0,
-    );
-
-    const updated = await this.prisma.savedCourse.update({
-      where: { id },
-      data: {
-        payload: JSON.parse(JSON.stringify(course)) as Prisma.InputJsonValue,
-      },
-    });
-
-    const [completedIds, stampedContentIds] = await Promise.all([
-      this.getCompletedIds(userId),
-      this.getStampedContentIds(userId),
-    ]);
-    return {
-      ...updated,
-      status: this.resolveStatus(
-        updated.travelDate,
-        updated.completedAt,
-        completedIds.has(updated.id),
-      ),
-      stampProgress: this.computeStampProgress(
-        updated.payload,
-        stampedContentIds,
-      ),
-    };
   }
 
   private defaultStayMinutes(type: CourseItemType, style: Style): number {
@@ -331,12 +411,12 @@ export class SavedCourseService {
   }
 
   private resolveStatus(
-    travelDate: Date | null,
+    startedAt: Date | null,
     completedAt: Date | null,
     completedByReview: boolean,
   ): SavedCourseStatus {
     if (completedAt || completedByReview) return SavedCourseStatus.COMPLETED;
-    return travelDate
+    return startedAt
       ? SavedCourseStatus.IN_PROGRESS
       : SavedCourseStatus.PENDING;
   }

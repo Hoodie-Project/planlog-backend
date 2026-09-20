@@ -60,8 +60,10 @@ model SavedCourse {
   title     String
   zone      String
   nights    Int      @default(0)
-  /// 여행 날짜(선택). "다가오는 여행" D-Day 표시 및 저장한 코스 상태(대기중/진행중) 계산에 사용
+  /// 여행 날짜(선택). "다가오는 여행" D-Day 표시에 사용(상태 계산엔 미사용 — "코스 시작하기" 버튼이 기준)
   travelDate DateTime?
+  /// "코스 시작하기" 버튼을 누른 시각(선택). 있으면 진행중으로 간주.
+  startedAt DateTime?
   /// 리뷰/스탬프 여부와 무관하게 유저가 직접 "완료" 처리한 시각(선택). 있으면 완료로 간주.
   completedAt DateTime?
   /// 생성 당시 CourseDto 전체 (관광 원본은 contentId 참조이므로 스냅샷 보관 OK)

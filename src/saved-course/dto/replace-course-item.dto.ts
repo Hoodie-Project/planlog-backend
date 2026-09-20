@@ -8,24 +8,44 @@ import {
   IsString,
   Min,
 } from 'class-validator';
+import { CourseItemType } from '../../course/dto/course.dto';
 import { Zone } from '../../common/gangwon.constants';
 
-/** GET /spots/location, /accommodations/location 등에서 고른 후보로 코스 항목 하나를 교체 */
+/**
+ * GET /spots/location, /accommodations/location 등에서 고른 후보로 코스 항목을 교체하거나(order 지정),
+ * 그 날에 없던 숙소를 새로 추가한다(order 생략 — "숙소 선택하기").
+ */
 export class ReplaceCourseItemDto {
-  @ApiProperty({ description: '교체할 항목이 속한 일자(1부터)', example: 1 })
+  @ApiProperty({
+    description: '대상 항목이 속한(또는 추가될) 일자(1부터)',
+    example: 1,
+  })
   @Type(() => Number)
   @IsInt()
   @Min(1)
   day: number;
 
-  @ApiProperty({
-    description: '교체할 항목의 기존 순서(그 날 동선 내 order, 1부터)',
+  @ApiPropertyOptional({
+    description:
+      '교체할 항목의 기존 순서(그 날 동선 내 order, 1부터). 생략하면 "추가" 모드로 동작 — ' +
+      '이 날에 새 숙소 항목을 마지막에 추가한다("숙소 선택하기"). 이때 type 은 무시하고 항상 STAY로 추가됨',
     example: 2,
   })
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  order: number;
+  order?: number;
+
+  @ApiPropertyOptional({
+    enum: CourseItemType,
+    description:
+      '추가 모드(order 생략)에서만 사용. 현재는 STAY(숙소)만 지원. 생략 시 STAY로 간주',
+    default: CourseItemType.STAY,
+  })
+  @IsOptional()
+  @IsEnum(CourseItemType)
+  type?: CourseItemType;
 
   @ApiProperty({
     description: '교체할 새 장소/숙소의 TourAPI contentId',
