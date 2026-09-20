@@ -156,37 +156,18 @@ export class CourseService {
       if (daySpots.length === 0) break;
       daySpots.forEach((s) => used.add(s.raw.contentid));
 
-      const midPos = daySpots[Math.floor(daySpots.length / 2)]?.pos ?? anchor;
-      const meal = this.pickNearRandom(
-        restaurantPool,
-        midPos,
-        used,
-        rng,
-        maxLeg,
-      );
-      if (meal) used.add(meal.raw.contentid);
-
-      const lastPos = daySpots[daySpots.length - 1]?.pos ?? anchor;
-      const stay = isLast
-        ? null
-        : this.pickNearRandom(stayPool, lastPos, used, rng, maxLeg);
-      if (stay) used.add(stay.raw.contentid);
-
-      // 마지막 날(당일치기 포함)은 숙소가 없어 오후 일찍 끝나버리므로 저녁 식사를 추가로 배치
-      const dinner = isLast
-        ? this.pickNearRandom(restaurantPool, lastPos, used, rng, maxLeg)
-        : null;
-      if (dinner) used.add(dinner.raw.contentid);
-
       const items = this.buildItinerary(
         daySpots,
-        meal,
-        dinner,
-        stay,
+        restaurantPool,
+        isLast ? null : stayPool,
+        isLast,
         anchor,
         transport,
         dayStart,
         spotStayMin,
+        used,
+        rng,
+        maxLeg,
       );
       const distance = items.reduce((s, it) => s + it.distanceFromPrev, 0);
       const travel = items.reduce((s, it) => s + it.travelMinutesFromPrev, 0);
@@ -632,10 +613,15 @@ export class CourseService {
     return null;
   }
 
+  /** 반경을 벗어나도 억지로 넣기보다 생략하는 게 나은 지점 — maxLeg 의 몇 배까지 봐줄지 */
+  private static readonly NEAR_RANDOM_RELAX_FACTOR = 3;
+
   /**
    * 기준점 인근 미사용 후보 상위 5곳 중 가중 랜덤 1곳 (점심/저녁/숙소용).
-   * maxLeg 을 주면 그 반경 내 후보를 우선하고(동선이 엉뚱하게 멀리 튀는 것 방지),
-   * 반경 내에 후보가 없을 때만 전체 중 가장 가까운 곳으로 폴백한다.
+   * maxLeg 을 주면 그 반경 내 후보를 우선하고, 없으면 maxLeg*3 까지 완화해서 찾는다.
+   * 그마저도 없으면 억지로 아주 먼 곳을 끼워 넣지 않고 null(생략)을 반환한다 —
+   * 예전엔 "전체 중 가장 가까운 곳"으로 무제한 폴백해서 존별 데이터 밀도가 낮을 때
+   * 수십 km 떨어진 식당/숙소가 끼어드는 문제가 있었다.
    */
   private pickNearRandom(
     candidates: Candidate[],
@@ -649,10 +635,61 @@ export class CourseService {
       .map((c) => ({ item: c, d: haversineMeters(from, c.pos) }))
       .sort((a, b) => a.d - b.d);
     if (avail.length === 0) return null;
-    const inRange = maxLeg ? avail.filter((x) => x.d <= maxLeg) : avail;
-    const pool = inRange.length > 0 ? inRange : avail;
+
+    let pool = avail;
+    if (maxLeg) {
+      const strict = avail.filter((x) => x.d <= maxLeg);
+      const relaxed =
+        strict.length > 0
+          ? strict
+          : avail.filter(
+              (x) => x.d <= maxLeg * CourseService.NEAR_RANDOM_RELAX_FACTOR,
+            );
+      if (relaxed.length === 0) return null;
+      pool = relaxed;
+    }
+
     const top = pool
       .slice(0, Math.min(5, pool.length))
+      .map((x, idx) => ({ item: x.item, weight: 5 - idx }));
+    return this.weightedPick(top, rng).item;
+  }
+
+  /**
+   * from(직전 지점)·to(바로 다음 방문지) 양쪽 모두 maxLeg 이내인 후보 중 가중 랜덤 1곳.
+   * 동선 중간에 끼워 넣는 점심처럼, 앞뒤 두 구간이 전부 이동 범위를 지켜야 할 때 사용.
+   * (한쪽만 보면 반대쪽 구간에서 다시 튈 수 있음)
+   */
+  private pickNearRandomOnPath(
+    candidates: Candidate[],
+    from: LatLng,
+    to: LatLng,
+    used: Set<string>,
+    rng: Rng,
+    maxLeg: number,
+  ): Candidate | null {
+    const avail = candidates
+      .filter((c) => !used.has(c.raw.contentid))
+      .map((c) => ({
+        item: c,
+        d1: haversineMeters(from, c.pos),
+        d2: haversineMeters(c.pos, to),
+      }));
+    if (avail.length === 0) return null;
+
+    const within = (limit: number) =>
+      avail.filter((x) => x.d1 <= limit && x.d2 <= limit);
+
+    const strict = within(maxLeg);
+    const relaxed =
+      strict.length > 0
+        ? strict
+        : within(maxLeg * CourseService.NEAR_RANDOM_RELAX_FACTOR);
+    if (relaxed.length === 0) return null;
+
+    const sorted = [...relaxed].sort((a, b) => a.d1 + a.d2 - (b.d1 + b.d2));
+    const top = sorted
+      .slice(0, Math.min(5, sorted.length))
       .map((x, idx) => ({ item: x.item, weight: 5 - idx }));
     return this.weightedPick(top, rng).item;
   }
@@ -668,16 +705,24 @@ export class CourseService {
     return arr[arr.length - 1];
   }
 
-  /** 하루 동선 + 점심(+ 마지막 날은 저녁) + 숙소를 시간표로 배치 */
+  /**
+   * 하루 동선 + 점심(+ 마지막 날은 저녁) + 숙소를 시간표로 배치.
+   * 점심/저녁/숙소는 "끼워 넣을 시점의 직전 위치"를 기준으로 그 자리에서 고른다.
+   * (동선 중간 어딘가의 좌표를 미리 골라두면, 실제로 스플라이스되는 지점의
+   *  앞/뒤 구간이 maxLeg 를 벗어날 수 있어 반드시 prevPos 기준으로 즉석에서 선택해야 함)
+   */
   private buildItinerary(
     spots: Candidate[],
-    meal: Candidate | null,
-    dinner: Candidate | null,
-    stay: Candidate | null,
+    restaurantPool: Candidate[],
+    stayPool: Candidate[] | null,
+    includeDinner: boolean,
     start: LatLng,
     transport: Transport,
     dayStart: number,
     spotStayMin: number,
+    used: Set<string>,
+    rng: Rng,
+    maxLeg: number,
   ): CourseItemDto[] {
     const items: CourseItemDto[] = [];
     let clock = dayStart;
@@ -712,21 +757,49 @@ export class CourseService {
       prevPos = c.pos;
     };
 
+    const pickMeal = (): Candidate | null =>
+      this.pickNearRandom(restaurantPool, prevPos, used, rng, maxLeg);
+
     for (const spot of spots) {
-      if (!mealInserted && meal && clock >= LUNCH_AFTER) {
-        push(meal, CourseItemType.MEAL, MEAL_STAY_MIN);
-        mealInserted = true;
+      if (!mealInserted && clock >= LUNCH_AFTER) {
+        // 동선 중간에 끼워 넣는 점심은 "직전 지점"뿐 아니라 "바로 다음 관광지"까지도
+        // maxLeg 이내여야 함 — 안 그러면 점심 다음 구간에서 다시 멀리 튈 수 있음
+        const meal = this.pickNearRandomOnPath(
+          restaurantPool,
+          prevPos,
+          spot.pos,
+          used,
+          rng,
+          maxLeg,
+        );
+        if (meal) {
+          push(meal, CourseItemType.MEAL, MEAL_STAY_MIN);
+          used.add(meal.raw.contentid);
+          mealInserted = true;
+        }
       }
       push(spot, CourseItemType.SPOT, spotStayMin);
     }
-    if (!mealInserted && meal) {
-      push(meal, CourseItemType.MEAL, MEAL_STAY_MIN);
+    if (!mealInserted) {
+      const meal = pickMeal();
+      if (meal) {
+        push(meal, CourseItemType.MEAL, MEAL_STAY_MIN);
+        used.add(meal.raw.contentid);
+      }
     }
-    if (dinner) {
-      push(dinner, CourseItemType.MEAL, MEAL_STAY_MIN);
+    if (includeDinner) {
+      const dinner = pickMeal();
+      if (dinner) {
+        push(dinner, CourseItemType.MEAL, MEAL_STAY_MIN);
+        used.add(dinner.raw.contentid);
+      }
     }
-    if (stay) {
-      push(stay, CourseItemType.STAY, 0);
+    if (stayPool) {
+      const stay = this.pickNearRandom(stayPool, prevPos, used, rng, maxLeg);
+      if (stay) {
+        push(stay, CourseItemType.STAY, 0);
+        used.add(stay.raw.contentid);
+      }
     }
     return items;
   }
