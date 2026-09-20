@@ -7,13 +7,39 @@ import {
   ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
-import { StampService, StampSortOrder } from './stamp.service';
+import {
+  StampEligibility,
+  StampEligibilityState,
+  StampService,
+  StampSortOrder,
+} from './stamp.service';
 import { CreateStampDto } from './dto/create-stamp.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { Zone } from '../common/gangwon.constants';
 import { Mood } from '../common/mood.constants';
 import type { User } from '../../generated/prisma/client.js';
+
+export class StampEligibilityDto implements StampEligibility {
+  @ApiProperty({
+    enum: StampEligibilityState,
+    description:
+      'ALREADY_STAMPED(수령완료) / REVIEWER(심사자, 항상 활성) / NO_LOCATION(위치권한 없음) / TOO_FAR(2km 밖) / ELIGIBLE(활성화 가능)',
+  })
+  state: StampEligibilityState;
+
+  @ApiProperty({
+    nullable: true,
+    description: '비활성 사유 한 줄(활성 상태면 null)',
+  })
+  reason: string | null;
+
+  @ApiProperty({
+    required: false,
+    description: '현재 위치 기준 거리(m). 계산됐을 때만 포함',
+  })
+  distance?: number;
+}
 
 export class StampEntityDto {
   @ApiProperty() id: string;
@@ -79,12 +105,45 @@ export class StampController {
   @Post()
   @ApiOperation({
     summary: '관광지 방문 인증(스탬프 획득)',
-    description:
-      '코스 내 관광지를 실제 방문했을 때 해당 감성존 도장을 찍습니다. 같은 관광지는 한 번만 인정(멱등). (JWT 필요)',
+    description: [
+      '코스 내 관광지를 실제 방문했을 때 해당 감성존 도장을 찍습니다. 같은 관광지는 한 번만 인정(멱등).',
+      '`curMapX`/`curMapY`(현재 위치)를 같이 보내야 하며, 관광지 실제 좌표(TourAPI 기준) 2km 이내가 아니면 거부됩니다.',
+      '단, 게스트(심사자) 계정은 위치 제한 없이 모든 장소에서 찍을 수 있습니다. (JWT 필요)',
+    ].join('\n'),
   })
   @ApiOkResponse({ type: StampEntityDto })
   create(@CurrentUser() user: User, @Body() dto: CreateStampDto) {
-    return this.stampService.create(user.id, dto);
+    return this.stampService.create(user, dto);
+  }
+
+  @Get('eligibility')
+  @ApiOperation({
+    summary: '스탬프 버튼 상태 확인 (실제로 찍지는 않음)',
+    description: [
+      '장소 상세 화면에서 스탬프 버튼을 어떤 디자인/문구로 보여줄지 미리 확인할 때 사용합니다.',
+      '실제 스탬프 생성 없이 상태만 계산해서 반환합니다.',
+      '',
+      '**입력**: `contentId`(필수), `curMapX`/`curMapY`(선택 — 위치 권한을 허용 안 했으면 생략)',
+      '',
+      '**출력 state**: ALREADY_STAMPED / REVIEWER / NO_LOCATION / TOO_FAR / ELIGIBLE',
+    ].join('\n'),
+  })
+  @ApiQuery({ name: 'contentId', required: true })
+  @ApiQuery({ name: 'curMapX', required: false })
+  @ApiQuery({ name: 'curMapY', required: false })
+  @ApiOkResponse({ type: StampEligibilityDto })
+  getEligibility(
+    @CurrentUser() user: User,
+    @Query('contentId') contentId: string,
+    @Query('curMapX') curMapX?: string,
+    @Query('curMapY') curMapY?: string,
+  ) {
+    return this.stampService.checkEligibility(
+      user,
+      contentId,
+      curMapX,
+      curMapY,
+    );
   }
 
   @Get()

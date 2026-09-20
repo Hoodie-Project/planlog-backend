@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsNumberString,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { Zone } from '../../common/gangwon.constants';
 
 export class CreateStampDto {
@@ -23,4 +29,18 @@ export class CreateStampDto {
   @IsOptional()
   @IsString()
   image?: string;
+
+  @ApiPropertyOptional({
+    description:
+      '현재 위치 경도(X). 이 관광지 좌표로부터 2km 이내여야 스탬프가 인정됨(심사자 계정 제외). 생략하면 위치 권한 미허용으로 간주해 거부됨',
+    example: '129.0334',
+  })
+  @IsOptional()
+  @IsNumberString()
+  curMapX?: string;
+
+  @ApiPropertyOptional({ description: '현재 위치 위도(Y)', example: '37.6907' })
+  @IsOptional()
+  @IsNumberString()
+  curMapY?: string;
 }

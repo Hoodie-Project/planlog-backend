@@ -1,30 +1,142 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { TourApiService } from '../tour-api/tour-api.service';
+import { TourRawItem } from '../tour-api/tour-api.types';
 import { CreateStampDto } from './dto/create-stamp.dto';
 import { Zone, ZONE_META } from '../common/gangwon.constants';
 import { Mood } from '../common/mood.constants';
+import { haversineMeters, toLatLng } from '../common/geo';
+import type { User } from '../../generated/prisma/client.js';
 
 const ALL_ZONES = Object.values(Zone);
+const STAMP_MAX_DISTANCE_METERS = 2000;
 
 export type StampSortOrder = 'asc' | 'desc';
 
+/** 스탬프 버튼 상태 — Figma "위치/권한 별 스탬프 활성화" 5states */
+export enum StampEligibilityState {
+  ALREADY_STAMPED = 'ALREADY_STAMPED', // 스탬프 수령 완료
+  REVIEWER = 'REVIEWER', // 심사자(게스트) — 위치 무관 항상 활성화
+  NO_LOCATION = 'NO_LOCATION', // 위치 권한 미허용 — 비활성화
+  TOO_FAR = 'TOO_FAR', // 2km 밖 — 비활성화
+  ELIGIBLE = 'ELIGIBLE', // 2km 이내 — 활성화
+}
+
+export interface StampEligibility {
+  state: StampEligibilityState;
+  /** 비활성화 사유 한 줄(활성 상태거나 사유가 필요 없으면 null) */
+  reason: string | null;
+  /** 현재 위치 기준 거리(m). 계산됐을 때만 포함 */
+  distance?: number;
+}
+
 @Injectable()
 export class StampService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly tourApi: TourApiService,
+  ) {}
 
-  /** 관광지 방문 인증 → 스탬프 획득(같은 관광지는 1회만, 멱등) */
-  create(userId: string, dto: CreateStampDto) {
+  /**
+   * 관광지 방문 인증 → 스탬프 획득(같은 관광지는 1회만, 멱등).
+   * 위치/권한 조건을 만족해야 함(checkEligibility) — 심사자(게스트)는 예외.
+   */
+  async create(user: User, dto: CreateStampDto) {
+    const eligibility = await this.checkEligibility(
+      user,
+      dto.contentId,
+      dto.curMapX,
+      dto.curMapY,
+    );
+    if (
+      eligibility.state === StampEligibilityState.NO_LOCATION ||
+      eligibility.state === StampEligibilityState.TOO_FAR
+    ) {
+      throw new BadRequestException(eligibility.reason);
+    }
+
     return this.prisma.stamp.upsert({
-      where: { userId_contentId: { userId, contentId: dto.contentId } },
+      where: {
+        userId_contentId: { userId: user.id, contentId: dto.contentId },
+      },
       update: {}, // 이미 찍었으면 그대로
       create: {
-        userId,
+        userId: user.id,
         zone: dto.zone,
         contentId: dto.contentId,
         title: dto.title,
         image: dto.image,
       },
     });
+  }
+
+  /**
+   * 스탬프 버튼이 어떤 상태여야 하는지 판정(실제로 찍지는 않음) — 장소 상세 화면에서
+   * 버튼 디자인/비활성 사유를 미리 보여줄 때 사용.
+   */
+  async checkEligibility(
+    user: User,
+    contentId: string,
+    curMapX?: string,
+    curMapY?: string,
+  ): Promise<StampEligibility> {
+    const existing = await this.prisma.stamp.findUnique({
+      where: { userId_contentId: { userId: user.id, contentId } },
+    });
+    if (existing) {
+      return {
+        state: StampEligibilityState.ALREADY_STAMPED,
+        reason: '이미 스탬프를 받았어요.',
+      };
+    }
+
+    if (user.isGuest) {
+      return {
+        state: StampEligibilityState.REVIEWER,
+        reason: null,
+      };
+    }
+
+    const curPos = toLatLng(curMapX, curMapY);
+    if (!curPos) {
+      return {
+        state: StampEligibilityState.NO_LOCATION,
+        reason: '위치 권한을 허용하면 스탬프를 찍을 수 있어요.',
+      };
+    }
+
+    const targetPos = await this.findSpotPos(contentId);
+    if (!targetPos) {
+      // 좌표를 확인할 수 없으면 막지 않는다(우리 쪽 데이터 문제로 사용자를 막지 않기 위함)
+      return { state: StampEligibilityState.ELIGIBLE, reason: null };
+    }
+
+    const distance = Math.round(haversineMeters(curPos, targetPos));
+    if (distance > STAMP_MAX_DISTANCE_METERS) {
+      return {
+        state: StampEligibilityState.TOO_FAR,
+        reason: '현재 위치에서 2km 이내여야 스탬프를 찍을 수 있어요.',
+        distance,
+      };
+    }
+
+    return { state: StampEligibilityState.ELIGIBLE, reason: null, distance };
+  }
+
+  /** 관광지의 실제 좌표(TourAPI 기준) — 클라이언트가 보낸 좌표를 신뢰하지 않기 위함 */
+  private async findSpotPos(contentId: string) {
+    try {
+      const { items } = await this.tourApi.getList<TourRawItem>(
+        'KorService2',
+        'detailCommon2',
+        { contentId },
+      );
+      const raw = items[0];
+      if (!raw) return null;
+      return toLatLng(raw.mapx, raw.mapy);
+    } catch {
+      return null;
+    }
   }
 
   /**
