@@ -21,13 +21,14 @@ export class FestivalService {
     const weekendOnly = query.weekendOnly !== 'false'; // 기본 true
     const { friday, sunday } = this.thisWeekendRange();
 
-    // eventStartDate: 오늘 이후 시작/진행중 축제를 충분히 받기 위해 이번 주 금요일 이전부터 조회
+    // eventStartDate: TourAPI 필수 파라미터. 강원 축제 등록 건수 자체가 적어
+    // 넉넉히(1년) 과거까지 열어야 데이터가 비지 않는다(등록 데이터 희소성 확인됨).
     const { items } = await this.tourApi.getList<TourRawItem>(
       KOR_SERVICE,
       'searchFestival2',
       {
         areaCode: GANGWON_AREA_CODE,
-        eventStartDate: this.toYmd(this.daysAgo(60)),
+        eventStartDate: this.toYmd(this.daysAgo(365)),
         numOfRows: query.numOfRows,
         arrange: 'A',
       },
@@ -59,13 +60,30 @@ export class FestivalService {
     }
 
     if (weekendOnly) {
-      festivals = festivals.filter((f) => f.isThisWeekend);
+      const weekendFestivals = festivals.filter((f) => f.isThisWeekend);
+      // 이번 주말과 겹치는 축제가 하나도 없으면(등록 데이터 희소) 최신 축제로 대체 노출
+      return weekendFestivals.length > 0
+        ? weekendFestivals
+        : this.sortByRecency(festivals);
     }
 
-    // 주말 개최 축제를 상단으로 정렬
-    return festivals.sort(
-      (a, b) => Number(b.isThisWeekend) - Number(a.isThisWeekend),
-    );
+    // 주말 개최 축제를 상단으로, 그 안에서는 최신순으로 정렬
+    return festivals.sort((a, b) => {
+      const weekendDiff = Number(b.isThisWeekend) - Number(a.isThisWeekend);
+      return weekendDiff !== 0 ? weekendDiff : this.compareRecency(a, b);
+    });
+  }
+
+  /** 시작일 기준 최신순(가까운 과거/미래 우선) 정렬 */
+  private sortByRecency(festivals: FestivalDto[]): FestivalDto[] {
+    return [...festivals].sort((a, b) => this.compareRecency(a, b));
+  }
+
+  private compareRecency(a: FestivalDto, b: FestivalDto): number {
+    const da = this.parseYmd(a.eventStartDate ?? '');
+    const db = this.parseYmd(b.eventStartDate ?? '');
+    if (!da || !db) return 0;
+    return db.getTime() - da.getTime(); // 시작일이 늦은(최신) 순
   }
 
   /** 이번 주(오늘 기준) 금요일~일요일 날짜 범위 */
