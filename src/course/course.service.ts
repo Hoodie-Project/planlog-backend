@@ -43,10 +43,16 @@ type Rng = () => number;
 
 const SPOT_STAY_MIN = 90; // 관광지 체류
 const FAMILY_SPOT_STAY_MIN = 120; // 가족과 함께: 체류시간을 넉넉하게
-const MEAL_STAY_MIN = 60; // 점심 체류
+const MEAL_STAY_MIN = 60; // 점심/저녁 체류
 const DAY_START = 10 * 60; // 기본 시작 시각 10:00 (분)
 const LUNCH_AFTER = 13 * 60; // 13:00 넘으면 점심 삽입
 const FAMILY_LEG_RATIO = 0.6; // 가족과 함께: 한 구간 최대 이동거리 축소 비율
+/** 관광지 풀 다양성 — 관광지뿐 아니라 문화시설·레포츠도 섞어 매번 비슷한 장소만 나오지 않게 함 */
+const SPOT_CONTENT_TYPES = [
+  ContentType.TOURIST_SPOT,
+  ContentType.CULTURE,
+  ContentType.LEPORTS,
+];
 /** 조용히 쉬고 싶어요: 스팟 단위 혼잡도 데이터가 없어 "연관관광지 다발(=인기) 스팟"을
  *  혼잡 가능성이 높은 곳으로 보고 감점하는 근사치를 사용한다. */
 const CALM_POPULARITY_PENALTY = -10;
@@ -80,8 +86,8 @@ export class CourseService {
       style === Style.FAMILY ? FAMILY_SPOT_STAY_MIN : SPOT_STAY_MIN;
 
     const [defaultSpots, restaurantPool, stayPool] = await Promise.all([
-      this.collect(zone, ContentType.TOURIST_SPOT),
-      this.collect(zone, ContentType.RESTAURANT),
+      this.collect(zone, SPOT_CONTENT_TYPES),
+      this.collect(zone, [ContentType.RESTAURANT]),
       this.collectStays(zone, style),
     ]);
 
@@ -151,18 +157,31 @@ export class CourseService {
       daySpots.forEach((s) => used.add(s.raw.contentid));
 
       const midPos = daySpots[Math.floor(daySpots.length / 2)]?.pos ?? anchor;
-      const meal = this.pickNearRandom(restaurantPool, midPos, used, rng);
+      const meal = this.pickNearRandom(
+        restaurantPool,
+        midPos,
+        used,
+        rng,
+        maxLeg,
+      );
       if (meal) used.add(meal.raw.contentid);
 
       const lastPos = daySpots[daySpots.length - 1]?.pos ?? anchor;
       const stay = isLast
         ? null
-        : this.pickNearRandom(stayPool, lastPos, used, rng);
+        : this.pickNearRandom(stayPool, lastPos, used, rng, maxLeg);
       if (stay) used.add(stay.raw.contentid);
+
+      // 마지막 날(당일치기 포함)은 숙소가 없어 오후 일찍 끝나버리므로 저녁 식사를 추가로 배치
+      const dinner = isLast
+        ? this.pickNearRandom(restaurantPool, lastPos, used, rng, maxLeg)
+        : null;
+      if (dinner) used.add(dinner.raw.contentid);
 
       const items = this.buildItinerary(
         daySpots,
         meal,
+        dinner,
         stay,
         anchor,
         transport,
@@ -352,21 +371,23 @@ export class CourseService {
     return String(js === 0 ? 7 : js);
   }
 
-  /** 감성존 시군구들에서 특정 타입 후보를 모아 좌표/점수 부여 */
+  /** 감성존 시군구들에서 지정한 타입(들)의 후보를 모아 좌표/점수 부여 */
   private async collect(
     zone: Zone,
-    contentTypeId: ContentType,
+    contentTypeIds: ContentType[],
   ): Promise<Candidate[]> {
     const meta = ZONE_META[zone];
     const results = await Promise.all(
-      meta.sigunguCodes.map((code) =>
-        this.tourApi.getList<TourRawItem>(KOR_SERVICE, 'areaBasedList2', {
-          areaCode: GANGWON_AREA_CODE,
-          sigunguCode: code,
-          contentTypeId,
-          numOfRows: 100,
-          arrange: 'O',
-        }),
+      meta.sigunguCodes.flatMap((code) =>
+        contentTypeIds.map((contentTypeId) =>
+          this.tourApi.getList<TourRawItem>(KOR_SERVICE, 'areaBasedList2', {
+            areaCode: GANGWON_AREA_CODE,
+            sigunguCode: code,
+            contentTypeId,
+            numOfRows: 100,
+            arrange: 'O',
+          }),
+        ),
       ),
     );
     return this.toCandidates(
@@ -611,20 +632,27 @@ export class CourseService {
     return null;
   }
 
-  /** 기준점 인근 미사용 후보 상위 5곳 중 가중 랜덤 1곳 (점심/숙소용) */
+  /**
+   * 기준점 인근 미사용 후보 상위 5곳 중 가중 랜덤 1곳 (점심/저녁/숙소용).
+   * maxLeg 을 주면 그 반경 내 후보를 우선하고(동선이 엉뚱하게 멀리 튀는 것 방지),
+   * 반경 내에 후보가 없을 때만 전체 중 가장 가까운 곳으로 폴백한다.
+   */
   private pickNearRandom(
     candidates: Candidate[],
     from: LatLng,
     used: Set<string>,
     rng: Rng,
+    maxLeg?: number,
   ): Candidate | null {
     const avail = candidates
       .filter((c) => !used.has(c.raw.contentid))
       .map((c) => ({ item: c, d: haversineMeters(from, c.pos) }))
       .sort((a, b) => a.d - b.d);
     if (avail.length === 0) return null;
-    const top = avail
-      .slice(0, Math.min(5, avail.length))
+    const inRange = maxLeg ? avail.filter((x) => x.d <= maxLeg) : avail;
+    const pool = inRange.length > 0 ? inRange : avail;
+    const top = pool
+      .slice(0, Math.min(5, pool.length))
       .map((x, idx) => ({ item: x.item, weight: 5 - idx }));
     return this.weightedPick(top, rng).item;
   }
@@ -640,10 +668,11 @@ export class CourseService {
     return arr[arr.length - 1];
   }
 
-  /** 하루 동선 + 점심 + 숙소를 시간표로 배치 */
+  /** 하루 동선 + 점심(+ 마지막 날은 저녁) + 숙소를 시간표로 배치 */
   private buildItinerary(
     spots: Candidate[],
     meal: Candidate | null,
+    dinner: Candidate | null,
     stay: Candidate | null,
     start: LatLng,
     transport: Transport,
@@ -692,6 +721,9 @@ export class CourseService {
     }
     if (!mealInserted && meal) {
       push(meal, CourseItemType.MEAL, MEAL_STAY_MIN);
+    }
+    if (dinner) {
+      push(dinner, CourseItemType.MEAL, MEAL_STAY_MIN);
     }
     if (stay) {
       push(stay, CourseItemType.STAY, 0);
