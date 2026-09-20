@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { TourApiService } from '../tour-api/tour-api.service';
 import { TourRawItem } from '../tour-api/tour-api.types';
 import {
@@ -57,6 +61,14 @@ const SPOT_CONTENT_TYPES = [
  *  혼잡 가능성이 높은 곳으로 보고 감점하는 근사치를 사용한다. */
 const CALM_POPULARITY_PENALTY = -10;
 const DEFAULT_POPULARITY_BONUS = 10;
+/**
+ * 출발지(역/터미널)에서 선택한 감성존까지 이동수단 기준 이동시간이 이보다 길면
+ * 코스 생성을 거부한다. km 같은 고정 거리로 자르면 뚜벅이/렌터카처럼 속도 차가
+ * 큰 이동수단에 똑같이 적용돼 말이 안 된다(예: 뚜벅이로 44km=11시간짜리 코스가
+ * "거리는 50km 이내"라는 이유로 통과되는 문제가 있었다). 이동시간 기준이면
+ * 뚜벅이는 짧은 거리, 렌터카는 먼 거리까지 자연스럽게 허용된다.
+ */
+const START_ZONE_MAX_MINUTES = 120;
 
 @Injectable()
 export class CourseService {
@@ -84,6 +96,7 @@ export class CourseService {
     const dayStart = this.parseStartTime(dto.startTime) ?? DAY_START;
     const spotStayMin =
       style === Style.FAMILY ? FAMILY_SPOT_STAY_MIN : SPOT_STAY_MIN;
+    const explicitStart = toLatLng(dto.startMapX, dto.startMapY);
 
     const [defaultSpots, restaurantPool, stayPool] = await Promise.all([
       this.collect(zone, SPOT_CONTENT_TYPES),
@@ -102,6 +115,21 @@ export class CourseService {
       throw new NotFoundException(
         '해당 감성존에서 좌표가 있는 관광지를 찾지 못했습니다.',
       );
+    }
+
+    if (explicitStart) {
+      const nearestMeters = Math.min(
+        ...spotPool.map((c) => haversineMeters(explicitStart, c.pos)),
+      );
+      const nearestMinutes = travelMinutes(nearestMeters, transport);
+      if (nearestMinutes > START_ZONE_MAX_MINUTES) {
+        throw new BadRequestException(
+          `선택하신 출발지가 '${ZONE_META[zone].label}'과 너무 멀리 떨어져 있어요` +
+            `(${this.transportLabel(transport)} 기준 가장 가까운 관광지까지 약 ` +
+            `${Math.round(nearestMinutes / 60)}시간, ${Math.round(nearestMeters / 1000)}km). ` +
+            '더 가까운 감성존이나 출발지, 또는 이동수단을 선택해주세요.',
+        );
+      }
     }
 
     // 연관관광지 맵 + 풀 이름 인덱스 (실패해도 코스 생성은 계속)
@@ -124,8 +152,6 @@ export class CourseService {
       }
     }
     const legs: RelatedLegDto[] = [];
-
-    const explicitStart = toLatLng(dto.startMapX, dto.startMapY);
     const used = new Set<string>();
     const days: CourseDayDto[] = [];
 
@@ -479,6 +505,10 @@ export class CourseService {
   /**
    * 출발점에서 최근접 이웃으로 n개 선택(한 구간 maxLeg 이내).
    * 매 단계 가까운 상위 3곳 중 가중 랜덤 → 동선에 변주를 준다.
+   * 단, 첫 스팟(route.length===0)은 maxLeg 를 적용하지 않는다 — 사용자가 고른
+   * 역/터미널(startMapX/Y)이 그 감성존의 관광지 밀집 지역과 멀리 떨어져 있으면
+   * 첫 구간부터 후보가 0개가 되어 코스 전체가 빈 채로 반환되는 문제가 있었다.
+   * (두 번째 스팟부터는 기존처럼 엄격하게 maxLeg 를 지킨다)
    */
   private routeNearestRandom(
     candidates: Candidate[],
@@ -491,14 +521,16 @@ export class CourseService {
     const route: Candidate[] = [];
     let cursor = start;
     while (route.length < n && pool.length > 0) {
-      const inRange = pool
-        .map((c, i) => ({
-          item: c,
-          poolIdx: i,
-          adj: haversineMeters(cursor, c.pos) - c.score * 300,
-        }))
-        .filter((x) => haversineMeters(cursor, x.item.pos) <= maxLeg)
-        .sort((a, b) => a.adj - b.adj);
+      const scored = pool.map((c, i) => ({
+        item: c,
+        poolIdx: i,
+        adj: haversineMeters(cursor, c.pos) - c.score * 300,
+      }));
+      const inRange = (
+        route.length === 0
+          ? scored
+          : scored.filter((x) => haversineMeters(cursor, x.item.pos) <= maxLeg)
+      ).sort((a, b) => a.adj - b.adj);
       if (inRange.length === 0) break;
       const top = inRange.slice(0, Math.min(3, inRange.length));
       // 가까울수록(앞 순위) 큰 가중치
@@ -571,15 +603,19 @@ export class CourseService {
       }
 
       // 2) 폴백: 최근접(상위 3 가중 랜덤)
+      // 첫 스팟(route.length===0)은 maxLeg 를 적용하지 않는다 — routeNearestRandom 과 동일한 이유
+      // (역/터미널 출발점이 관광지 밀집 지역과 멀면 첫 구간에서 후보가 0개가 되는 문제 방지)
       if (!pick) {
-        const inRange = pool
-          .filter((c) => haversineMeters(cursor, c.pos) <= maxLeg)
-          .sort(
-            (a, b) =>
-              haversineMeters(cursor, a.pos) -
-              a.score * 300 -
-              (haversineMeters(cursor, b.pos) - b.score * 300),
-          );
+        const inRange = (
+          route.length === 0
+            ? pool
+            : pool.filter((c) => haversineMeters(cursor, c.pos) <= maxLeg)
+        ).sort(
+          (a, b) =>
+            haversineMeters(cursor, a.pos) -
+            a.score * 300 -
+            (haversineMeters(cursor, b.pos) - b.score * 300),
+        );
         if (inRange.length === 0) break;
         const top = inRange
           .slice(0, Math.min(3, inRange.length))
