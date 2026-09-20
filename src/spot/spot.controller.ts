@@ -1,14 +1,42 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Param, Query, UseGuards } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiExcludeEndpoint,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiProperty,
   ApiTags,
 } from '@nestjs/swagger';
 import { SpotService } from './spot.service';
 import { LocationSpotQueryDto, ZoneSpotQueryDto } from './dto/spot-query.dto';
+import { SpotIntroDto } from './dto/spot-intro.dto';
 import { PlaceDto } from '../common/dto/place.dto';
+import { OptionalJwtAuthGuard } from '../auth/optional-jwt-auth.guard';
+import { CurrentUser } from '../auth/current-user.decorator';
+import type { User } from '../../generated/prisma/client.js';
+
+export class SpotDetailDto extends PlaceDto {
+  @ApiProperty({ description: '장소 개요(설명)' })
+  overview?: string;
+
+  @ApiProperty({
+    type: SpotIntroDto,
+    description: '이용정보(이용시간/주차/쉬는날 등)',
+  })
+  intro?: SpotIntroDto;
+
+  @ApiProperty({
+    description: '로그인 시에만 포함 — 이 장소를 이미 방문(스탬프)했는지',
+  })
+  stamped?: boolean;
+
+  @ApiProperty({
+    nullable: true,
+    description: '로그인 시에만 포함 — 방문(스탬프) 일시, 없으면 null',
+  })
+  visitedAt?: Date | null;
+}
 
 @ApiTags('관광지 (Spot)')
 @Controller('spots')
@@ -64,19 +92,28 @@ export class SpotController {
   }
 
   @Get(':contentId')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth()
   @ApiOperation({
     summary: '관광지 상세 조회',
-    description:
-      'detailCommon2 공통정보. 코스/목록에서 받은 `contentId`로 상세(개요 overview 포함)를 가져옵니다.',
+    description: [
+      'detailCommon2(공통정보) + detailIntro2(이용정보)를 합쳐서 반환합니다. 코스/목록에서 받은 `contentId`로 상세를 가져올 때 씁니다.',
+      '숙소(contentTypeId=32) 상세는 필드 구성이 달라 `GET /accommodations/{contentId}`를 따로 씁니다.',
+      '',
+      '**로그인 필요 없음.** 단, 유효한 JWT를 보내면(`Authorization: Bearer`) 응답에 `stamped`/`visitedAt`(이 장소를 이미 방문했는지)이 추가로 포함됩니다.',
+    ].join('\n'),
   })
   @ApiParam({
     name: 'contentId',
     description: 'TourAPI 콘텐츠 ID',
     example: '126508',
   })
-  @ApiOkResponse({ type: PlaceDto, description: 'PlaceDto + overview(개요)' })
-  findDetail(@Param('contentId') contentId: string) {
-    return this.spotService.findDetail(contentId);
+  @ApiOkResponse({ type: SpotDetailDto })
+  findDetail(
+    @Param('contentId') contentId: string,
+    @CurrentUser() user: User | null,
+  ) {
+    return this.spotService.findDetail(contentId, user?.id);
   }
 
   @Get(':contentId/images')

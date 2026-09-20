@@ -5,7 +5,10 @@ import { User } from '../../generated/prisma/client.js';
 import { AuthProvider } from '../../generated/prisma/enums.js';
 import { AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
 import { MeStatsDto } from './dto/me-stats.dto';
-import { RecentActivityDto, RecentActivityType } from './dto/recent-activity.dto';
+import {
+  RecentActivityDto,
+  RecentActivityType,
+} from './dto/recent-activity.dto';
 import { Zone } from '../common/gangwon.constants';
 
 const TOTAL_ZONE_COUNT = Object.values(Zone).length;

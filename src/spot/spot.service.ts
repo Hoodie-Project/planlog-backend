@@ -8,12 +8,30 @@ import {
 } from '../common/gangwon.constants';
 import { PlaceDto, toPlaceDto } from '../common/dto/place.dto';
 import { LocationSpotQueryDto, ZoneSpotQueryDto } from './dto/spot-query.dto';
+import { SpotIntroDto } from './dto/spot-intro.dto';
+import { PrismaService } from '../prisma/prisma.service';
 
 const KOR_SERVICE = 'KorService2';
 
+/** detailIntro2 raw 응답(관광 계열) — 필드는 존재할 때만 값이 들어옴 */
+interface SpotIntroRawItem {
+  infocenter?: string;
+  opendate?: string;
+  restdate?: string;
+  usetime?: string;
+  useseason?: string;
+  parking?: string;
+  chkbabycarriage?: string;
+  chkpet?: string;
+  chkcreditcard?: string;
+}
+
 @Injectable()
 export class SpotService {
-  constructor(private readonly tourApi: TourApiService) {}
+  constructor(
+    private readonly tourApi: TourApiService,
+    private readonly prisma: PrismaService,
+  ) {}
 
   /** 감성존(또는 강원 전체) 지역기반 관광지 조회 */
   async findByZone(query: ZoneSpotQueryDto): Promise<PlaceDto[]> {
@@ -55,25 +73,78 @@ export class SpotService {
     return this.excludeIds(items.map(toPlaceDto), query.excludeContentIds);
   }
 
-  /** 관광지 상세 (공통정보) */
+  /**
+   * 관광지 상세 (공통정보 + 이용정보).
+   * userId 를 주면(로그인 시) 이 장소를 이미 방문(스탬프)했는지도 함께 반환.
+   */
   async findDetail(
     contentId: string,
-  ): Promise<PlaceDto & { overview?: string }> {
+    userId?: string,
+  ): Promise<
+    PlaceDto & {
+      overview?: string;
+      intro?: SpotIntroDto;
+      stamped?: boolean;
+      visitedAt?: Date | null;
+    }
+  > {
+    // ⚠️ defaultYN/firstImageYN/addrinfoYN/mapinfoYN/overviewYN 파라미터는
+    // TourAPI 쪽에서 INVALID_REQUEST_PARAMETER_ERROR 로 거부함(스펙 변경) — 주지 않으면
+    // overview 포함 전체 필드가 기본으로 내려온다.
     const { items } = await this.tourApi.getList<
       TourRawItem & { overview?: string }
-    >(KOR_SERVICE, 'detailCommon2', {
-      contentId,
-      defaultYN: 'Y',
-      firstImageYN: 'Y',
-      addrinfoYN: 'Y',
-      mapinfoYN: 'Y',
-      overviewYN: 'Y',
-    });
+    >(KOR_SERVICE, 'detailCommon2', { contentId });
     const raw = items[0];
     if (!raw) {
       return { contentId, contentTypeId: '', title: '' };
     }
-    return { ...toPlaceDto(raw), overview: raw.overview };
+
+    const [intro, stamp] = await Promise.all([
+      this.fetchIntro(contentId, raw.contenttypeid),
+      userId
+        ? this.prisma.stamp.findUnique({
+            where: { userId_contentId: { userId, contentId } },
+          })
+        : Promise.resolve(null),
+    ]);
+
+    return {
+      ...toPlaceDto(raw),
+      overview: raw.overview,
+      intro,
+      ...(userId
+        ? { stamped: !!stamp, visitedAt: stamp?.visitedAt ?? null }
+        : {}),
+    };
+  }
+
+  /** 관광지 상세 이용정보(detailIntro2) — 없거나 실패해도 기본 상세는 보여줘야 하므로 undefined 반환 */
+  private async fetchIntro(
+    contentId: string,
+    contentTypeId: string,
+  ): Promise<SpotIntroDto | undefined> {
+    try {
+      const { items } = await this.tourApi.getList<SpotIntroRawItem>(
+        KOR_SERVICE,
+        'detailIntro2',
+        { contentId, contentTypeId },
+      );
+      const raw = items[0];
+      if (!raw) return undefined;
+      return {
+        infoCenter: raw.infocenter || undefined,
+        openDate: raw.opendate || undefined,
+        restDate: raw.restdate || undefined,
+        useTime: raw.usetime || undefined,
+        useSeason: raw.useseason || undefined,
+        parking: raw.parking || undefined,
+        babyCarriage: raw.chkbabycarriage || undefined,
+        petAllowed: raw.chkpet || undefined,
+        creditCard: raw.chkcreditcard || undefined,
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   /** 관광지 이미지 목록 (감성 인증 카드용 원본) */

@@ -1,11 +1,29 @@
-import { Controller, Get, Query } from '@nestjs/common';
-import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Param, Query } from '@nestjs/common';
+import {
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiProperty,
+  ApiTags,
+} from '@nestjs/swagger';
 import { AccommodationService } from './accommodation.service';
 import {
   AccommodationQueryDto,
   LocationAccommodationQueryDto,
 } from './dto/accommodation-query.dto';
 import { StayDto } from './dto/stay.dto';
+import { StayIntroDto } from './dto/stay-intro.dto';
+
+export class StayDetailDto extends StayDto {
+  @ApiProperty({ description: '숙소 개요(설명)' })
+  overview?: string;
+
+  @ApiProperty({
+    type: StayIntroDto,
+    description: '이용정보(체크인/아웃, 객실 수, 부대시설 등)',
+  })
+  intro?: StayIntroDto;
+}
 
 @ApiTags('숙소 (Accommodation)')
 @Controller('accommodations')
@@ -53,5 +71,23 @@ export class AccommodationController {
   @ApiOkResponse({ type: [StayDto] })
   findStaysByLocation(@Query() query: LocationAccommodationQueryDto) {
     return this.accommodationService.findStaysByLocation(query);
+  }
+
+  @Get(':contentId')
+  @ApiOperation({
+    summary: '숙소 상세 조회',
+    description: [
+      'detailCommon2(공통정보) + detailIntro2(숙박 특화 이용정보)를 합쳐서 반환합니다.',
+      '관광지 상세(`GET /spots/{contentId}`)와 API가 달라 필드 구성이 다릅니다 — 숙소는 체크인/체크아웃 시각, 객실 수, 부대시설 목록 등을 포함.',
+    ].join('\n'),
+  })
+  @ApiParam({
+    name: 'contentId',
+    description: 'TourAPI 콘텐츠 ID',
+    example: '2892217',
+  })
+  @ApiOkResponse({ type: StayDetailDto })
+  findDetail(@Param('contentId') contentId: string) {
+    return this.accommodationService.findDetail(contentId);
   }
 }

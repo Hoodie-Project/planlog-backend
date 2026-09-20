@@ -14,6 +14,7 @@ import {
   StayType,
 } from './dto/accommodation-query.dto';
 import { StayDto } from './dto/stay.dto';
+import { StayIntroDto } from './dto/stay-intro.dto';
 
 const KOR_SERVICE = 'KorService2';
 
@@ -21,6 +22,45 @@ const KOR_SERVICE = 'KorService2';
 interface StayRawItem extends TourRawItem {
   cat3?: string;
 }
+
+/** detailIntro2 raw 응답(숙박, contentTypeId=32) — 편의시설 플래그는 '1'=있음 */
+interface StayIntroRawItem {
+  checkintime?: string;
+  checkouttime?: string;
+  roomcount?: string;
+  chkcooking?: string;
+  parkinglodging?: string;
+  infocenterlodging?: string;
+  reservationurl?: string;
+  subfacility?: string;
+  barbecue?: string;
+  beauty?: string;
+  beverage?: string;
+  bicycle?: string;
+  campfire?: string;
+  fitness?: string;
+  karaoke?: string;
+  publicbath?: string;
+  publicpc?: string;
+  sauna?: string;
+  seminar?: string;
+  sports?: string;
+}
+
+const AMENITY_LABELS: Record<string, string> = {
+  barbecue: '바베큐',
+  beauty: '뷰티시설',
+  beverage: '식음료',
+  bicycle: '자전거 대여',
+  campfire: '캠프파이어',
+  fitness: '헬스장',
+  karaoke: '노래방',
+  publicbath: '대중목욕탕',
+  publicpc: '공용PC',
+  sauna: '사우나',
+  seminar: '세미나실',
+  sports: '스포츠시설',
+};
 
 @Injectable()
 export class AccommodationService {
@@ -79,6 +119,71 @@ export class AccommodationService {
       stays = stays.filter((s) => s.stayType === query.type);
     }
     return this.excludeIds(stays, query.excludeContentIds);
+  }
+
+  /** 숙소 상세 (공통정보 + 숙박 특화 이용정보: 체크인/아웃, 객실 수, 부대시설 등) */
+  async findDetail(
+    contentId: string,
+  ): Promise<StayDto & { overview?: string; intro?: StayIntroDto }> {
+    // ⚠️ defaultYN/firstImageYN/addrinfoYN/mapinfoYN/overviewYN 파라미터는
+    // TourAPI 쪽에서 INVALID_REQUEST_PARAMETER_ERROR 로 거부함(스펙 변경) — 주지 않으면
+    // overview 포함 전체 필드가 기본으로 내려온다.
+    const { items } = await this.tourApi.getList<
+      StayRawItem & { overview?: string }
+    >(KOR_SERVICE, 'detailCommon2', { contentId });
+    const raw = items[0];
+    if (!raw) {
+      return {
+        contentId,
+        contentTypeId: '',
+        title: '',
+        stayType: StayType.VALUE,
+        amenities: [],
+      } as unknown as StayDto & { overview?: string; intro?: StayIntroDto };
+    }
+
+    const intro = await this.fetchIntro(contentId);
+
+    return {
+      ...toPlaceDto(raw),
+      zone: inferZone(raw.title, raw.sigungucode),
+      stayType: this.classify(raw),
+      overview: raw.overview,
+      intro,
+    };
+  }
+
+  /** 숙박 상세 이용정보(detailIntro2) — 없거나 실패해도 기본 상세는 보여줘야 하므로 undefined 반환 */
+  private async fetchIntro(
+    contentId: string,
+  ): Promise<StayIntroDto | undefined> {
+    try {
+      const { items } = await this.tourApi.getList<StayIntroRawItem>(
+        KOR_SERVICE,
+        'detailIntro2',
+        { contentId, contentTypeId: ContentType.STAY },
+      );
+      const raw = items[0];
+      if (!raw) return undefined;
+
+      const amenities = Object.entries(AMENITY_LABELS)
+        .filter(([key]) => raw[key as keyof StayIntroRawItem] === '1')
+        .map(([, label]) => label);
+
+      return {
+        checkInTime: raw.checkintime || undefined,
+        checkOutTime: raw.checkouttime || undefined,
+        roomCount: raw.roomcount || undefined,
+        cooking: raw.chkcooking || undefined,
+        parking: raw.parkinglodging || undefined,
+        infoCenter: raw.infocenterlodging || undefined,
+        reservationUrl: raw.reservationurl || undefined,
+        subFacility: raw.subfacility || undefined,
+        amenities,
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   /** excludeContentIds(쉼표 구분 문자열)에 해당하는 항목 제외 */
