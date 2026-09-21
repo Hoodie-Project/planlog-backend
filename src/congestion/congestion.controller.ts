@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import {
   ApiOkResponse,
   ApiOperation,
@@ -6,6 +6,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CongestionService } from './congestion.service';
+import { SpotCongestionQueryDto } from './dto/spot-congestion-query.dto';
 
 class WeekdayCongestionDto {
   @ApiProperty({ example: '6', description: '요일 코드(1=월..7=일)' })
@@ -38,6 +39,30 @@ class CongestionResponseDto {
   busiest: WeekdayCongestionDto | null;
 }
 
+class SpotCongestionDayDto {
+  @ApiProperty({ example: '2026-10-05' }) date: string;
+  @ApiProperty({ example: 42.3, description: '예측 집중률 0~100' })
+  rate: number;
+  @ApiProperty({ example: 'MEDIUM', enum: ['LOW', 'MEDIUM', 'HIGH'] })
+  level: string;
+}
+
+class SpotCongestionForecastDto {
+  @ApiProperty({
+    description:
+      '관광지명 매칭 성공 여부(이 데이터는 contentId가 없어 이름으로만 매칭)',
+  })
+  matched: boolean;
+  @ApiProperty({ example: '강릉향교' }) title: string;
+  @ApiProperty({ nullable: true, example: '강릉시' }) sigungu: string | null;
+  @ApiProperty({
+    type: [SpotCongestionDayDto],
+    description:
+      '조회일 기준 향후 최대 30일(date 지정 시 해당 일자만), 날짜 오름차순',
+  })
+  days: SpotCongestionDayDto[];
+}
+
 @ApiTags('혼잡도 (Congestion)')
 @Controller('congestion')
 export class CongestionController {
@@ -63,5 +88,27 @@ export class CongestionController {
         ? weekdays.reduce((a, b) => (b.index > a.index ? b : a))
         : null;
     return { weekdays, leastBusy, busiest };
+  }
+
+  @Get('spot')
+  @ApiOperation({
+    summary: '관광지(스팟) 단위 집중률 예측',
+    description: [
+      '한국관광공사 "관광지 집중률 및 방문자 추이 예측 정보"(TatsCnctrRateService) 기반.',
+      '조회일 기준 향후 최대 30일의 관광지별 예측 집중률(0~100)을 제공합니다.',
+      '',
+      '⚠️ 이 데이터는 contentId 가 없고 관광지명(문자열)으로만 제공돼, `title` 파라미터로 이름 매칭합니다',
+      '(정확 일치 우선, 없으면 부분일치 폴백). 매칭 실패 시 `matched: false` + 빈 배열 반환(에러 아님).',
+      '',
+      '**입력**: `zone`(필수), `title`(필수, 관광지명), `date`(선택, YYYY-MM-DD — 생략 시 향후 30일 전체)',
+    ].join('\n'),
+  })
+  @ApiOkResponse({ type: SpotCongestionForecastDto })
+  getSpotCongestion(@Query() query: SpotCongestionQueryDto) {
+    return this.congestionService.getSpotForecast(
+      query.zone,
+      query.title,
+      query.date,
+    );
   }
 }
