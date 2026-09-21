@@ -20,6 +20,7 @@ import { NotificationSettingsModule } from './notification-settings/notification
 import { CourseFeedbackModule } from './course-feedback/course-feedback.module';
 import { RecordModule } from './record/record.module';
 import { StationModule } from './station/station.module';
+import { CourseReviewModule } from './course-review/course-review.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { StationModule } from './station/station.module';
     CourseFeedbackModule,
     RecordModule,
     StationModule,
+    CourseReviewModule,
   ],
   controllers: [AppController],
 })
