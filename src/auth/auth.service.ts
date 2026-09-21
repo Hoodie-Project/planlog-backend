@@ -14,9 +14,21 @@ import { Zone } from '../common/gangwon.constants';
 
 const TOTAL_ZONE_COUNT = Object.values(Zone).length;
 
-/** 게스트 로그인 고정 자격증명(심사·테스트용 — 하드코딩) */
-const GUEST_LOGIN_ID = 'guest';
-const GUEST_LOGIN_PASSWORD = '2026guest!';
+interface GuestAccount {
+  guestId: string;
+  password: string;
+  /** User.providerId 겸 계정 구분자(고정) */
+  nickname: string;
+}
+
+/**
+ * 게스트 로그인 고정 계정 목록(심사·테스트용 — 하드코딩).
+ * 계정마다 providerId 를 guestId 로 분리해서 스탬프/저장코스/기록이 서로 섞이지 않는다.
+ */
+const GUEST_ACCOUNTS: GuestAccount[] = [
+  { guestId: 'guest', password: '2026guest!', nickname: 'Guest' },
+  { guestId: 'openapi', password: '2026openapi!', nickname: 'Guest2' },
+];
 
 interface KakaoProfile {
   id: number;
@@ -67,12 +79,12 @@ export class AuthService {
     return this.issue(user);
   }
 
-  /** 게스트 계정 발급 (심사·테스트용, 고정 아이디/비밀번호 검증 후 고정 계정 재사용) */
+  /** 게스트 계정 발급 (심사·테스트용, 고정 아이디/비밀번호 검증 후 해당 고정 계정 재사용) */
   async guestLogin(dto: GuestLoginDto): Promise<AuthResponseDto> {
-    if (
-      dto.guestId !== GUEST_LOGIN_ID ||
-      dto.password !== GUEST_LOGIN_PASSWORD
-    ) {
+    const account = GUEST_ACCOUNTS.find(
+      (a) => a.guestId === dto.guestId && a.password === dto.password,
+    );
+    if (!account) {
       throw new UnauthorizedException(
         '아이디 또는 비밀번호가 올바르지 않습니다.',
       );
@@ -82,14 +94,14 @@ export class AuthService {
       where: {
         provider_providerId: {
           provider: AuthProvider.GUEST,
-          providerId: 'guest',
+          providerId: account.guestId,
         },
       },
       update: {},
       create: {
         provider: AuthProvider.GUEST,
-        providerId: 'guest',
-        nickname: 'Guest',
+        providerId: account.guestId,
+        nickname: account.nickname,
         isGuest: true,
       },
     });

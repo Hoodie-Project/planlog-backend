@@ -49,11 +49,15 @@ export class AuthController {
   @Post('guest')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '게스트 로그인 (심사·테스트용, 고정 아이디/비밀번호)',
+    summary: '게스트 로그인 (심사·테스트용, 고정 아이디/비밀번호 — 계정 2개)',
     description: [
-      '⚠️ 아이디/비밀번호가 고정값입니다(회원가입 없음). 앱스토어/플레이스토어 심사 시 테스트 계정 입력란에는 아래 고정 아이디/비밀번호를 그대로 안내하면 됩니다.',
+      '⚠️ 아이디/비밀번호가 고정값입니다(회원가입 없음). 계정마다 스탬프/저장코스/기록이 서로 독립적입니다(동시에 여러 명이 써도 데이터 안 섞임).',
       '',
-      `**요청 본문**: \`{ "guestId": "guest", "password": "2026guest!" }\` (고정값, 다른 값이면 401)`,
+      '**고정 계정**',
+      '- `{ "guestId": "guest", "password": "2026guest!" }`',
+      '- `{ "guestId": "openapi", "password": "2026openapi!" }`',
+      '',
+      '위 조합이 아니면 401. 앱스토어/플레이스토어 심사 시 테스트 계정 입력란에는 이 중 하나를 그대로 안내하면 됩니다.',
       '**응답(AuthResponseDto)**: `{ accessToken: 서비스 JWT, user: { ..., isGuest: true } }`',
     ].join('\n'),
   })
