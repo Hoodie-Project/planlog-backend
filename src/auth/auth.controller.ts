@@ -16,6 +16,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { GuestLoginDto } from './dto/guest-login.dto';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
 import { MeStatsDto } from './dto/me-stats.dto';
@@ -48,18 +49,17 @@ export class AuthController {
   @Post('guest')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: '게스트 로그인 (심사·테스트용, 아이디/비밀번호 없음)',
+    summary: '게스트 로그인 (심사·테스트용, 고정 아이디/비밀번호)',
     description: [
-      '⚠️ 별도의 아이디·비밀번호가 존재하지 않습니다. 이 API를 호출(요청 본문 없이 POST)하는 것 자체가 로그인이며, 즉시 고정 게스트 계정("Guest")으로 JWT가 발급됩니다.',
-      '앱스토어/플레이스토어 심사 시 테스트 계정 입력란에는 **"게스트로 시작하기" 버튼 클릭만으로 로그인됨(계정 정보 입력 불필요)** 이라고 안내하면 됩니다.',
+      '⚠️ 아이디/비밀번호가 고정값입니다(회원가입 없음). 앱스토어/플레이스토어 심사 시 테스트 계정 입력란에는 아래 고정 아이디/비밀번호를 그대로 안내하면 됩니다.',
       '',
-      '**요청 본문**: 없음',
+      `**요청 본문**: \`{ "guestId": "guest", "password": "2026guest!" }\` (고정값, 다른 값이면 401)`,
       '**응답(AuthResponseDto)**: `{ accessToken: 서비스 JWT, user: { ..., isGuest: true } }`',
     ].join('\n'),
   })
   @ApiOkResponse({ type: AuthResponseDto })
-  guest() {
-    return this.authService.guestLogin();
+  guest(@Body() dto: GuestLoginDto) {
+    return this.authService.guestLogin(dto);
   }
 
   @Get('me')

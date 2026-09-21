@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { User } from '../../generated/prisma/client.js';
 import { AuthProvider } from '../../generated/prisma/enums.js';
 import { AuthResponseDto, AuthUserDto } from './dto/auth-response.dto';
+import { GuestLoginDto } from './dto/guest-login.dto';
 import { MeStatsDto } from './dto/me-stats.dto';
 import {
   RecentActivityDto,
@@ -12,6 +13,10 @@ import {
 import { Zone } from '../common/gangwon.constants';
 
 const TOTAL_ZONE_COUNT = Object.values(Zone).length;
+
+/** 게스트 로그인 고정 자격증명(심사·테스트용 — 하드코딩) */
+const GUEST_LOGIN_ID = 'guest';
+const GUEST_LOGIN_PASSWORD = '2026guest!';
 
 interface KakaoProfile {
   id: number;
@@ -62,8 +67,17 @@ export class AuthService {
     return this.issue(user);
   }
 
-  /** 게스트 계정 발급 (심사·테스트용, 고정 계정 재사용) */
-  async guestLogin(): Promise<AuthResponseDto> {
+  /** 게스트 계정 발급 (심사·테스트용, 고정 아이디/비밀번호 검증 후 고정 계정 재사용) */
+  async guestLogin(dto: GuestLoginDto): Promise<AuthResponseDto> {
+    if (
+      dto.guestId !== GUEST_LOGIN_ID ||
+      dto.password !== GUEST_LOGIN_PASSWORD
+    ) {
+      throw new UnauthorizedException(
+        '아이디 또는 비밀번호가 올바르지 않습니다.',
+      );
+    }
+
     const user = await this.prisma.user.upsert({
       where: {
         provider_providerId: {
