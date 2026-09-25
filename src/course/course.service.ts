@@ -61,6 +61,8 @@ const SPOT_CONTENT_TYPES = [
  *  혼잡 가능성이 높은 곳으로 보고 감점하는 근사치를 사용한다. */
 const CALM_POPULARITY_PENALTY = -10;
 const DEFAULT_POPULARITY_BONUS = 10;
+/** PET 스타일: 반려동물 동반 가능 장소를 일반 장소보다 항상 먼저 고르게 하는 가중치 */
+const PET_PRIORITY_BONUS = 50;
 /**
  * 출발지(역/터미널)에서 선택한 감성존까지 이동수단 기준 이동시간이 이보다 길면
  * 코스 생성을 거부한다. km 같은 고정 거리로 자르면 뚜벅이/렌터카처럼 속도 차가
@@ -109,7 +111,23 @@ export class CourseService {
     if (style === Style.PET) {
       const petRaw = await this.pet.getPetSpotRawItems(zone);
       const petCands = this.toCandidates(petRaw, ZONE_META[zone].keywords);
-      if (petCands.length >= 3) spotPool = petCands;
+      if (petCands.length >= 3) {
+        // ⚠️ 예전엔 여기서 spotPool 을 petCands 로 완전히 교체했는데, 존에 반려동물
+        // 동반 가능 장소가 3~10곳 정도로 적으면(흔함) 1박2일처럼 하루 이상 필요한
+        // 스팟 수(spotCount×dayCount)를 못 채워서 2일차가 텅 비거나 spotCount 미달로
+        // 끝나버렸다. 주석("부족하면 일반으로 폴백")이 의도한 대로, 반려동물 장소에
+        // 우선순위 점수를 크게 얹어 항상 먼저 선택되게 하되 일반 관광지도 폴백으로
+        // 풀에 남겨둔다.
+        const petIds = new Set(petCands.map((c) => c.raw.contentid));
+        const boosted = petCands.map((c) => ({
+          ...c,
+          score: c.score + PET_PRIORITY_BONUS,
+        }));
+        const fallback = defaultSpots.filter(
+          (c) => !petIds.has(c.raw.contentid),
+        );
+        spotPool = [...boosted, ...fallback];
+      }
     }
     if (spotPool.length === 0) {
       throw new NotFoundException(
@@ -418,12 +436,16 @@ export class CourseService {
       ),
     );
     let items = results.flatMap((r) => r.items);
-    // 반려동물 스타일이면 캠핑/펜션 위주로 살짝 가중(상세 펫 API 연동은 다음 반복)
+    // 반려동물 스타일이면 캠핑/펜션 위주로 우선 사용.
+    // ⚠️ pickNearRandom 은 순수 거리 기준이라(스코어 미반영) 필터링된 풀이 너무
+    // 작으면(예: 1~2곳) 그 좌표 반경 안에 하나도 없어 숙소 항목이 통째로 빠지는
+    // 문제가 있었다(STAY_COUNT=0). 지역적으로 어느 정도 커버할 만큼 있을 때만
+    // 교체하고, 부족하면 전체 숙소 풀로 폴백한다.
     if (style === Style.PET) {
       const petFiltered = items.filter((it) =>
         /펜션|캠핑|글램핑|풀빌라/.test(it.title),
       );
-      if (petFiltered.length > 0) items = petFiltered;
+      if (petFiltered.length >= 5) items = petFiltered;
     }
     return this.toCandidates(items, meta.keywords);
   }
