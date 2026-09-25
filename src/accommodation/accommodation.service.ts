@@ -8,6 +8,7 @@ import {
   inferZone,
 } from '../common/gangwon.constants';
 import { toPlaceDto } from '../common/dto/place.dto';
+import { LatLng, haversineMeters, toLatLng } from '../common/geo';
 import {
   AccommodationQueryDto,
   LocationAccommodationQueryDto,
@@ -17,6 +18,8 @@ import { StayDto } from './dto/stay.dto';
 import { StayIntroDto } from './dto/stay-intro.dto';
 
 const KOR_SERVICE = 'KorService2';
+/** 시군구별 앵커(관광지 중심점) 계산용 표본 개수 */
+const ANCHOR_SAMPLE_ROWS = 30;
 
 /** searchStay2 응답의 숙박 분류 필드(있을 때 활용) */
 interface StayRawItem extends TourRawItem {
@@ -71,11 +74,16 @@ export class AccommodationService {
       ? ZONE_META[query.zone].sigunguCodes
       : [undefined];
 
-    const results = await Promise.all(
-      sigunguCodes.map((code) =>
-        this.searchStay(code, query.numOfRows, query.pageNo),
+    const [results, anchors] = await Promise.all([
+      Promise.all(
+        sigunguCodes.map((code) =>
+          this.searchStay(code, query.numOfRows, query.pageNo),
+        ),
       ),
-    );
+      query.zone
+        ? this.computeSigunguAnchors(ZONE_META[query.zone].sigunguCodes)
+        : Promise.resolve(new Map<string, LatLng>()),
+    ]);
 
     let stays: StayDto[] = this.dedupe(results.flat()).map((raw) => ({
       ...toPlaceDto(raw),
@@ -83,10 +91,74 @@ export class AccommodationService {
       stayType: this.classify(raw),
     }));
 
+    if (anchors.size > 0) {
+      stays = this.sortByZoneAnchor(stays, anchors);
+    }
+
     if (query.type) {
       stays = stays.filter((s) => s.stayType === query.type);
     }
     return this.excludeIds(stays, query.excludeContentIds);
+  }
+
+  /**
+   * 시군구별 "실제 관광지 분포 중심점"을 구해 숙소 정렬 기준으로 쓴다.
+   * 존이 여러 시군구(예: 레트로존=강릉+원주)에 걸치면 시군구별로 따로 앵커를
+   * 잡아야 한다 — 전체 평균을 내면 두 도시 사이 허허벌판이 나와버리기 때문.
+   * (예: 강릉은 동해바다존과 시군구코드를 공유해서, 안 나누면 강릉 숙소가
+   * 항상 해변 쪽 인기 숙소 위주로만 상위에 뜨는 문제가 있었음)
+   */
+  private async computeSigunguAnchors(
+    sigunguCodes: string[],
+  ): Promise<Map<string, LatLng>> {
+    const anchors = new Map<string, LatLng>();
+    await Promise.all(
+      sigunguCodes.map(async (code) => {
+        try {
+          const { items } = await this.tourApi.getList<TourRawItem>(
+            KOR_SERVICE,
+            'areaBasedList2',
+            {
+              areaCode: GANGWON_AREA_CODE,
+              sigunguCode: code,
+              contentTypeId: ContentType.TOURIST_SPOT,
+              numOfRows: ANCHOR_SAMPLE_ROWS,
+              pageNo: 1,
+            },
+          );
+          const points = items
+            .map((it) => toLatLng(it.mapx, it.mapy))
+            .filter((p): p is LatLng => p !== null);
+          if (points.length === 0) return;
+          anchors.set(code, {
+            lat: points.reduce((s, p) => s + p.lat, 0) / points.length,
+            lng: points.reduce((s, p) => s + p.lng, 0) / points.length,
+          });
+        } catch {
+          // 앵커 계산 실패해도 숙소 조회 자체는 막지 않음(정렬 없이 원본 순서 유지)
+        }
+      }),
+    );
+    return anchors;
+  }
+
+  /** 숙소를 "속한 시군구의 관광지 중심점"과 가까운 순으로 정렬(좌표/앵커 없으면 뒤로) */
+  private sortByZoneAnchor(
+    stays: StayDto[],
+    anchors: Map<string, LatLng>,
+  ): StayDto[] {
+    return stays
+      .map((s, idx) => {
+        const anchor = s.sigunguCode ? anchors.get(s.sigunguCode) : undefined;
+        const pos = toLatLng(s.mapX, s.mapY);
+        const dist =
+          anchor && pos
+            ? haversineMeters(pos, anchor)
+            : Number.POSITIVE_INFINITY;
+        return { s, dist, idx };
+      })
+      .sort((a, b) => a.dist - b.dist || a.idx - b.idx)
+      .map((w) => w.s);
   }
 
   /**
