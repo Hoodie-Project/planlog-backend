@@ -186,7 +186,6 @@ export class CourseService {
         daySpots,
         restaurantPool,
         isLast ? null : stayPool,
-        isLast,
         anchor,
         transport,
         dayStart,
@@ -210,6 +209,9 @@ export class CourseService {
 
     const totalDistance = days.reduce((s, d) => s + d.distance, 0);
     const totalTravelMinutes = days.reduce((s, d) => s + d.travelMinutes, 0);
+    // 스팟 풀이 부족해 요청한 nights 보다 days 가 적게 만들어질 수 있어(위 for 루프의
+    // `break`), 요청값을 그대로 돌려주지 않고 실제로 만들어진 days 기준으로 재계산한다.
+    const actualNights = Math.max(0, days.length - 1);
 
     const congestion = dto.travelDate
       ? await this.buildCongestion(dto.travelDate)
@@ -234,8 +236,8 @@ export class CourseService {
       zoneLabel: ZONE_META[zone].label,
       transport,
       style,
-      nights,
-      summary: `${ZONE_META[zone].label} ${this.transportLabel(transport)} ${this.nightsLabel(nights)} 코스`,
+      nights: actualNights,
+      summary: `${ZONE_META[zone].label} ${this.transportLabel(transport)} ${this.nightsLabel(actualNights)} 코스`,
       totalDistance,
       totalTravelMinutes,
       days,
@@ -742,16 +744,21 @@ export class CourseService {
   }
 
   /**
-   * 하루 동선 + 점심(+ 마지막 날은 저녁) + 숙소를 시간표로 배치.
+   * 하루 동선 + 점심 + 저녁(매일) + 숙소(마지막 날 제외)를 시간표로 배치.
    * 점심/저녁/숙소는 "끼워 넣을 시점의 직전 위치"를 기준으로 그 자리에서 고른다.
    * (동선 중간 어딘가의 좌표를 미리 골라두면, 실제로 스플라이스되는 지점의
    *  앞/뒤 구간이 maxLeg 를 벗어날 수 있어 반드시 prevPos 기준으로 즉석에서 선택해야 함)
+   *
+   * ⚠️ 저녁은 "코스 마지막 날"이 아니라 매일 넣는다. 예전엔 isLast 에만 묶여있어서
+   * 정작 숙소에 묵는 밤(마지막 날 제외 모든 날)엔 저녁이 없고, 숙소 없이 떠나는
+   * 마지막 날에만 저녁이 붙는 거꾸로 된 결과가 나왔다(2박3일 기준: 1·2일차엔 저녁 없이
+   * 숙소만, 3일차엔 숙소 없이 저녁만). 실제 여행에서는 숙소에 묵는 날일수록 저녁이
+   * 필요하므로 매일 저녁을 넣도록 수정.
    */
   private buildItinerary(
     spots: Candidate[],
     restaurantPool: Candidate[],
     stayPool: Candidate[] | null,
-    includeDinner: boolean,
     start: LatLng,
     transport: Transport,
     dayStart: number,
@@ -823,12 +830,10 @@ export class CourseService {
         used.add(meal.raw.contentid);
       }
     }
-    if (includeDinner) {
-      const dinner = pickMeal();
-      if (dinner) {
-        push(dinner, CourseItemType.MEAL, MEAL_STAY_MIN);
-        used.add(dinner.raw.contentid);
-      }
+    const dinner = pickMeal();
+    if (dinner) {
+      push(dinner, CourseItemType.MEAL, MEAL_STAY_MIN);
+      used.add(dinner.raw.contentid);
     }
     if (stayPool) {
       const stay = this.pickNearRandom(stayPool, prevPos, used, rng, maxLeg);
